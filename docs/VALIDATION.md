@@ -13,9 +13,12 @@ that platform limitation as an explicit skip, preserving the real symlink checks
 for environments that support them. See the test output and GitHub Actions for
 the current total and each platform's outcome.
 
-Linux/Windows CI is configured for Python 3.11 and 3.13. Configuration of CI alone
-does not establish a passing run. Release inventories use LF text and explicit
-portable path ordering so the same sources can be checked across platforms.
+[CI run 36271005994](https://github.com/MarcoDeliaBot/astra-flash-orchestrator/actions/runs/36271005994)
+passed all **86 tests in each of four jobs**: Linux and Windows, each with Python
+3.11 and 3.13. This includes the real symlink tests without skips. The example
+plan and 46-file release inventory also passed in every job. Release inventories
+use LF text and explicit portable path ordering across platforms. Consult the
+latest commit's Actions run for subsequent revisions.
 
 No live GLM inference, end-to-end client routing, model quality or cost comparison
 has been performed for this fork. The historical evidence below belongs to the
