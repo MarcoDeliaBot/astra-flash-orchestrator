@@ -1,12 +1,18 @@
-# Install using Codex
+# Advanced: native Astra + GLM workers inside Codex
+
+If your worker runs in the **ZCode app**, use [INSTALL-IN-ZCODE.md](INSTALL-IN-ZCODE.md)
+instead: Astra stays in Codex and GLM executes the file-based handoff in ZCode.
+The guide below is a different integration: a native Codex worker through an
+already-configured Router. It does not control ZCode or reuse its login.
 
 Give Codex the location of this repository and the prompt below. This authorization covers only installation, not a real delegated task.
 
 ```text
-Install Astra + selectable workers for Codex from this repository.
+Install Astra + GLM-5.3-Flash for native Codex delegation from this repository.
 
-Use worker route deepseek/deepseek-v4.1-flash unless I explicitly name another
-route documented in this repository. Do not infer or auto-select a billing provider.
+Use the exact existing GLM-5.3-Flash provider route I name. If I have not identified
+it, ask which configured route to use. Do not infer a billing provider, use the
+legacy DeepSeek default, or substitute a GLM orchestrator.
 
 Read README.md, install.py, POLICY.md and WORKER-INSTRUCTIONS.md first.
 Inspect relevant local configuration without printing secrets, full private
@@ -21,7 +27,7 @@ worker model and catalog-supported effort.
 
 Verify Python 3.11+, native subagent/custom-role client support, and the selected
 worker route in the effective configuration/catalog. Pass it to install.py with
---worker-route when it is not the direct DeepSeek default.
+--worker-route for dry run, apply and doctor; do not omit it during first setup.
 The default python3 may be older than 3.11; find an existing 3.11+ interpreter
 such as python3.12 and use it for every command here. Do not install or upgrade a
 runtime to satisfy this.

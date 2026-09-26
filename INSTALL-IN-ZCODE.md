@@ -1,22 +1,30 @@
-# Use the workflow entirely inside ZCode
+# Astra in Codex orchestrates; GLM-5.3-Flash in ZCode implements
 
-This adapter uses **GLM as both coordinator and implementation worker**. It
-preserves the plan -> implement -> review workflow without requiring Astra or
-Codex Router. It uses the model/account already selected in ZCode; the installer
-does not inspect account settings or request credentials.
+The roles are fixed:
 
-The native worker inherits the primary session's model **and reasoning effort**.
-Select **GLM-5.3-Flash** in ZCode to use it in both roles. Changing the primary
-model also changes subsequent worker calls. This is intentional inheritance,
-not a model pin. Separate contexts do not provide independent model judgment.
+| Application | Model | Responsibility | Skill |
+| --- | --- | --- | --- |
+| Codex | Astra | Plan, assign, review and accept | `astra-glm-orchestrator` |
+| ZCode Agent | GLM-5.3-Flash | Implement, test, debug and report | `glm-worker` |
+
+GLM does not orchestrate, create a second worker, or accept its own work.
+You select the model in each app. Skill files do not switch models or prove
+model identity. No API credentials are needed by this file-based adapter; each
+app uses its existing account connection.
+
+**The handoff is manual.** Astra writes an assignment in the shared project;
+you send the prepared instruction in ZCode. GLM writes its result; you tell Astra
+to review it. Installing skills does not create an automatic connection between
+the apps. For native automatic delegation inside Codex, use the separate
+[Router integration](INSTALL-IN-CODEX.md) with an already-configured GLM route.
+That integration is not ZCode control and does not reuse a ZCode login implicitly.
 
 ## Install
 
-Requirements: ZCode Agent with custom subagents available, and Python 3.11+.
-Custom subagents are a user-level beta feature; verify availability in your app.
-Use this adapter for ZCode Agent, not a different agent framework running in the
-same app. See the official [skills](https://zcode.z.ai/en/docs/skill) and
-[subagents](https://zcode.z.ai/en/docs/subagents) documentation.
+Requirements: Codex with Astra selected, ZCode Agent with GLM-5.3-Flash selected,
+the same project checkout accessible in both apps, and Python 3.11+ for setup.
+This adapter uses ordinary skills; it does not require ZCode custom subagents.
+See the official [ZCode skills documentation](https://zcode.z.ai/en/docs/skill).
 
 From the complete repository folder, run:
 
@@ -26,50 +34,81 @@ python -B install_zcode.py --apply
 python -B install_zcode.py --check
 ```
 
-The first command previews; the second writes only these two definitions plus
-an undo receipt:
+The first command previews; the second writes these two definitions plus an
+undo receipt under `~/.zcode/astra-flash-install-backups/`:
 
-- `~/.zcode/skills/glm-orchestrator/SKILL.md`
-- `~/.zcode/agents/glm-orchestrator-builder.md`
+- `~/.agents/skills/astra-glm-orchestrator/SKILL.md` for Codex.
+- `~/.zcode/skills/glm-worker/SKILL.md` for ZCode.
 
 Existing files with different contents require an explicit `--replace` after
 review and are backed up. Repeating the same installation is a no-op. Settings,
-credentials, AGENTS.md and other skills/agents are preserved. If needed, pass
-`--zcode-home PATH` consistently to select another user configuration directory.
-The check verifies file contents only; it does not prove runtime loading or
-successful inference. No model request is made during installation or testing.
+credentials, AGENTS.md and unrelated skills/agents are preserved. Use `--home`
+for the Codex skill's user home and `--zcode-home` for ZCode's configuration
+directory when overriding locations; pass the same options to check and undo.
+The check verifies file contents and absence of obsolete coordinator definitions,
+not app discovery, model selection or successful inference. Setup makes no model
+requests and does not submit a task in either app.
+
+## Upgrade from the former GLM coordinator
+
+Version 1.3.0-glm.2 installed `glm-orchestrator` and
+`glm-orchestrator-builder`, incorrectly making GLM the coordinator. That design
+is withdrawn. Upgrade with:
+
+```sh
+python -B install_zcode.py --migrate-legacy
+python -B install_zcode.py --migrate-legacy --apply
+python -B install_zcode.py --check
+```
+
+Migration creates the two correct skills and backs up/removes only the old
+`~/.zcode/skills/glm-orchestrator/SKILL.md` and
+`~/.zcode/agents/glm-orchestrator-builder.md`. Known file hashes are required;
+customized old definitions stop the entire change for manual reconciliation.
+Other files in those directories are preserved. `--replace` does not override
+the protection for customized obsolete definitions.
 
 ## Start using it
 
-1. In **Settings -> Skills**, click **Refresh** and check that `glm-orchestrator`
-   is enabled.
-2. In **Settings -> Subagents**, check that `glm-orchestrator-builder` is enabled
-   with **Inherit default** for its model.
-3. Start a **new ZCode Agent session** in the project you want to work on and
-   select **GLM-5.3-Flash**. Existing sessions do not reload custom agent files.
-4. Type `$`, select **glm-orchestrator**, and describe the task. Do not invoke the
-   builder directly for orchestration: the main conversation delegates to it.
+1. In ZCode **Settings -> Skills**, click **Refresh** and enable `glm-worker`.
+   After an upgrade, refresh **Subagents** too: the old builder should disappear.
+2. Open fresh conversations in both apps against the agreed project checkout;
+   old conversations can retain old instructions. Keep **Astra in Codex** and
+   **GLM-5.3-Flash in ZCode**. If Codex does not discover its new skill, reopen it.
+3. In **Codex**, select `$astra-glm-orchestrator` and describe your objective.
+   Astra prepares the plan and a bounded `TASK.md` plus a ZCode instruction.
+4. In **ZCode**, send that instruction using `$glm-worker` and the exact task path.
+   GLM implements the assignment and writes `RESULT.md` for Astra.
+5. Tell **Astra in Codex** that the report is ready. Astra reviews the actual
+   changes and checks, then writes `REVIEW.md` with acceptance or corrections.
 
-Example in Italian:
+Example in Codex:
 
 ```text
-$glm-orchestrator
+$astra-glm-orchestrator
 
-Nel progetto aperto, implementa [descrivi la funzionalita].
-Leggi le istruzioni e i checkpoint del progetto, prepara il piano,
-delega l'implementazione a glm-orchestrator-builder e verifica il risultato.
-Mantieni GLM-5.3-Flash come modello selezionato e rispetta il lavoro esistente.
+Obiettivo: [descrivi la funzionalita].
+Tu Astra sei l'orchestratore. Prepara il piano e l'incarico per
+GLM-5.3-Flash in ZCode; dammi il messaggio da inviare all'operaio.
+Conserva tu la revisione e l'accettazione finale.
 ```
 
-The coordinator handles planning, browser/UI checks and final review; the builder
-handles code, tests and debugging. ZCode Browser Use is main-agent-only.
-The first useful task is the opportunity to inspect the
-host's worker metadata and actual results. No live GLM run or performance/cost
-comparison is implied by the offline checks.
+Example in ZCode, after Astra has created the real file:
 
-If the skill appears but the builder does not, check custom-subagent availability,
-enablement and a new session. The skill reports a blocker instead of silently
-substituting a different role or performing the delegated task itself.
+```text
+$glm-worker
+
+Esegui l'incarico di Astra in "[percorso assoluto del TASK.md]".
+Usa GLM-5.3-Flash. Scrivi la consegna nel RESULT.md indicato.
+Non orchestrare e non approvare il tuo lavoro: la revisione spetta ad Astra.
+```
+
+Use one writer in the shared checkout: Astra does not edit GLM's assigned paths
+while execution is active. A result report must match task ID, revision and
+baseline. Neither a file labeled "Astra" nor a worker's self-report proves
+authorization, model identity or correct execution. Actual acceptance rests on
+the brief, patch and verification evidence. Runtime execution, quality and cost
+savings are not established by the offline test suite.
 
 ## Undo
 
@@ -80,6 +119,8 @@ python -B install_zcode.py --undo PATH_TO_RECEIPT
 python -B install_zcode.py --undo PATH_TO_RECEIPT --apply
 ```
 
-Undo only touches the exact two owned paths. It refuses to overwrite later user
-edits or restore a receipt targeting other files. It can leave empty directories;
-it does not delete unrelated files or change ZCode settings.
+Undo is restricted to the two new skill paths and the two legacy definition
+paths. Undoing a migration restores the former GLM coordinator files and removes
+newly created skills; use it only when that rollback is intended. Later user edits
+or recreated legacy files block undo before restoration. Empty directories may
+remain. No unrelated files or model/account settings are changed.

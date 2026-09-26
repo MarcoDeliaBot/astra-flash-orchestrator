@@ -13,8 +13,10 @@ class ReleaseTests(unittest.TestCase):
     def test_zcode_adapter_is_in_distribution(self):
         names = {p.relative_to(release.ROOT).as_posix() for p in release.selected()}
         self.assertTrue({'install_zcode.py', 'INSTALL-IN-ZCODE.md',
-                         'zcode/skills/glm-orchestrator/SKILL.md',
-                         'zcode/agents/glm-orchestrator-builder.md'}.issubset(names))
+                         'zcode/skills/glm-worker/SKILL.md',
+                         'handoff/skills/astra-glm-orchestrator/SKILL.md'}.issubset(names))
+        self.assertNotIn('zcode/skills/glm-orchestrator/SKILL.md', names)
+        self.assertNotIn('zcode/agents/glm-orchestrator-builder.md', names)
 
     def test_opencode_adapter_is_in_distribution(self):
         names = {p.relative_to(release.ROOT).as_posix() for p in release.selected()}

@@ -11,7 +11,7 @@ ROOT_FILES = {'README.md', 'LICENSE', 'VERSION', 'INSTALL-IN-CODEX.md', 'POLICY.
               'SECURITY.md', 'CHANGELOG.md', '.gitignore', 'install.py',
               'INSTALL-IN-OPENCODE.md', 'install_opencode.py', '.gitattributes',
               'INSTALL-IN-ZCODE.md', 'install_zcode.py'}
-TREES = {'docs', 'skill', 'examples', 'tests', 'scripts', 'opencode', 'zcode'}
+TREES = {'docs', 'skill', 'examples', 'tests', 'scripts', 'opencode', 'zcode', 'handoff'}
 SUFFIXES = {'.md', '.py', '.json', '.yaml', '.svg'}
 
 

@@ -1,6 +1,21 @@
 # Changelog
 
+## 1.3.0-glm.3 - Restore Astra orchestration with a GLM worker
+
+- Replace the all-GLM ZCode design with `astra-glm-orchestrator` in Codex and
+  `glm-worker` in ZCode. Astra plans, assigns, reviews and accepts; GLM-5.3-Flash
+  implements, tests and reports without delegation or self-approval.
+- Make manual cross-app dispatch explicit through TASK.md, RESULT.md and
+  REVIEW.md. Installing the skills creates no automatic bridge or model route.
+- Add guarded migration of known former GLM coordinator definitions, backups,
+  exact-path undo and rollback of partial migration failures. Preserve customized
+  legacy files, credentials, model settings and unrelated skills.
+- Update public setup guidance and native Codex examples to distinguish ZCode
+  handoff from an existing Router route. Keep upstream integrations compatible.
+
 ## 1.3.0-glm.2 - Native ZCode adapter
+
+Historical release; its all-GLM coordination design is withdrawn in 1.3.0-glm.3.
 
 - Add a native `glm-orchestrator` skill and `glm-orchestrator-builder` subagent
   for using the plan, implement and review workflow entirely inside ZCode.

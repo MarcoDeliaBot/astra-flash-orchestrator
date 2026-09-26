@@ -151,7 +151,14 @@ def apply_changes(changes: list[dict], codex_home: Path, input_hashes: dict[str,
     completed = []
     try:
         for change in changes:
-            atomic_write(change["path"], change["after"], change["mode"])
+            if change["after"] is None:
+                # Explicit migration deletions are backed up like updates.
+                # Recheck immediately before unlinking; never delete a tree.
+                if contents(change["path"]) != change["before"]:
+                    raise SetupError("An installation target changed before removal. Rerun the installer.")
+                change["path"].unlink()
+            else:
+                atomic_write(change["path"], change["after"], change["mode"])
             completed.append(change)
     except BaseException:
         for change in reversed(completed):

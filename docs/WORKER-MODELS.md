@@ -1,5 +1,10 @@
 # Choose the implementation model
 
+For **Astra in Codex + GLM-5.3-Flash in the ZCode app**, use the
+[two-app handoff guide](../INSTALL-IN-ZCODE.md). The roles stay fixed and the
+handoff is manual. The routes below apply only to the separate native Codex
+Router integration; a ZCode login does not configure those routes.
+
 This fork keeps Astra responsible for architecture, task boundaries and final
 acceptance. You can select DeepSeek V4.1 Flash, GLM-5.3 or GLM-5.3-Flash as the
 implementation worker. A worker explores the repository, edits, tests and fixes

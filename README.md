@@ -1,21 +1,35 @@
-# Astra + Selectable Workers, with a native ZCode workflow
+# Astra orchestrates. GLM-5.3-Flash implements.
 
-Astra plans and reviews. Choose **DeepSeek V4.1 Flash, GLM-5.3 or GLM-5.3-Flash**
-to implement, test and debug each bounded task.
+**ChatGPT/Astra in Codex is the orchestrator:** it plans, assigns work, reviews
+the changes and decides acceptance. **GLM-5.3-Flash in ZCode is the worker:**
+it implements, tests, debugs and returns evidence to Astra.
 
-**Using ZCode with GLM already selected?** Use the
-[native ZCode adapter](INSTALL-IN-ZCODE.md): GLM coordinates, implements and
-reviews through `$glm-orchestrator` and a native worker. It inherits your current
-ZCode model/account and needs neither Astra nor Codex Router.
+Use the [Codex + ZCode setup](INSTALL-IN-ZCODE.md) to install
+`$astra-glm-orchestrator` in Codex and `$glm-worker` in ZCode. GLM does not
+coordinate another GLM agent. The former all-GLM adapter is withdrawn; the
+installer provides a guarded migration with backups.
+
+**Cross-app dispatch is manual:** Astra writes a task file, you send its prepared
+instruction in ZCode, GLM writes a result, and you tell Astra to review it. The
+skills do not create an automatic connection between apps or change models.
+
+```text
+Codex / Astra          -> plan + TASK.md + worker instruction
+User                  -> send the instruction in ZCode
+ZCode / GLM-5.3-Flash  -> code + tests + RESULT.md
+User                  -> tell Astra the result is ready
+Codex / Astra          -> review actual changes + REVIEW.md + accept or correct
+```
 
 This is a community fork of [Ethan Rogers' Astra Flash Orchestrator](https://github.com/ethanplusai/astra-flash-orchestrator),
 distributed under the original [MIT license](LICENSE). It preserves the original
-skill and role names for compatibility and adds explicit GLM worker selection.
+native Codex skill and role names for compatibility, and adds explicit GLM
+worker selection plus the two-app workflow above.
 
 ## What this fork adds
 
-- A native ZCode skill and worker for an entirely GLM workflow, with an offline,
-  reversible installer that preserves existing settings and credentials.
+- Distinct Astra coordinator and GLM worker skills, with a reversible installer
+  that preserves settings/credentials and retires the mistaken GLM coordinator.
 - Six documented GLM routes through Z.ai API, Z.ai Coding Plan and Ollama Cloud.
 - An offline `python -B install.py --list-worker-routes` command.
 - Model-neutral worker instructions, exact route and effort pinning, and guarded
@@ -23,17 +37,33 @@ skill and role names for compatibility and adds explicit GLM worker selection.
 - Refusal to install if the inspected model catalog changes before files are written.
 - Additional regression tests and Linux/Windows CI with reproducible text files.
 
-Read [Choose the implementation model](docs/WORKER-MODELS.md) for GLM examples,
-model changes, provider distinctions and verification limits. DeepSeek remains
-the first-install default; existing installations retain their selected route.
+The remaining sections describe advanced native Codex routing and the historical
+upstream benchmark. They do not change the Astra/GLM roles above. The native
+Router installer retains upstream route compatibility; explicitly select a GLM
+route when using that separate integration. See
+[Choose the implementation model](docs/WORKER-MODELS.md).
 
 **Validation status:** GLM installation and configuration are covered by offline
 tests. Live GLM routing, output quality and cost savings have not been measured
 for this fork. No model inference is performed by the installer or test suite.
 
-OpenCode users can use the existing [native OpenCode adapter](INSTALL-IN-OPENCODE.md),
-which inherits the selected primary model and requires an explicit worker model.
-OpenCode IDs must come from OpenCode's own model list; Codex Router is not required.
+The existing [OpenCode adapter](INSTALL-IN-OPENCODE.md) remains for compatibility.
+It uses OpenCode's own models and does not connect to this Astra conversation or
+control ZCode. Its primary model is not guaranteed to be Astra.
+
+## Quick setup for Codex + ZCode
+
+From a clone of this repository, preview then apply:
+
+```sh
+python -B install_zcode.py
+python -B install_zcode.py --apply
+python -B install_zcode.py --check
+```
+
+Upgrading from the old GLM coordinator? Add `--migrate-legacy` to preview and
+apply. Follow [the complete guide](INSTALL-IN-ZCODE.md) for refreshing skills,
+starting fresh conversations, task/result handoff and undo.
 
 ## Historical upstream DeepSeek benchmark
 
@@ -88,9 +118,9 @@ This is workflow guidance, not a deterministic scheduler, a security sandbox, or
 
 ### One orchestration workflow
 
-There is no mode setting or mode-switch command within the Codex skill. It uses
-the Astra → Worker → Astra workflow for substantial implementation. The separate
-ZCode adapter uses the selected GLM model for both roles.
+There is no mode setting within the native Codex skill. It uses Astra to plan
+and review and a configured worker to implement. The ZCode handoff adapter keeps
+the same responsibilities, with Astra in Codex and GLM-5.3-Flash in ZCode.
 
 Three routing outcomes remain intentionally different:
 
@@ -101,7 +131,7 @@ Three routing outcomes remain intentionally different:
 
 Those are scope and safety decisions, not user-selectable performance modes.
 
-## Codex requirements
+## Advanced: native Codex Router requirements
 
 Before installing, you need:
 
@@ -143,7 +173,7 @@ installation stops instead of silently choosing another provider.
 
 The installer supports loopback Router URLs using `/v1` or `/_codex-router/<capability>/v1`. It rejects remote hosts, embedded credentials, queries, fragments and unexpected paths. Client/project/UI overrides still need checking in your actual session. Router subagent selection enables discovery; it does not prove successful inference. Some Router enable commands automatically launch paid verification, so inspect the installed version before changing selection. This installer never enables routes or runs those probes.
 
-## Install in Codex
+## Advanced: install the native Codex Router integration
 
 Download this repository as a ZIP and extract it, or clone it:
 
@@ -156,15 +186,15 @@ Run the following commands from that repository folder.
 
 ### Fastest safe terminal install
 
-The installer performs its own prerequisite checks before writing. Preview the
-exact destinations, then apply:
+This is separate from ZCode. For an **already configured Z.ai Coding Plan route**,
+preview the destinations, then apply the explicit GLM worker selection:
 
 ```sh
-python3 -B install.py
-python3 -B install.py --apply
+python3 -B install.py --worker-route zai-coding/glm-5.3-flash
+python3 -B install.py --worker-route zai-coding/glm-5.3-flash --apply
 ```
 
-That is the normal installation path. The first command changes nothing. The
+The first command changes nothing. The
 second repeats preflight, installs atomically, backs up existing instructions and
 prints a guarded undo receipt. It does not change your root model, Router,
 credentials, permissions or reasoning effort.
@@ -185,7 +215,8 @@ collect a key, certify the model or make an inference request.
 Ask Codex:
 
 ```text
-Read INSTALL-IN-CODEX.md in this folder and install the package following it.
+Read INSTALL-IN-CODEX.md and install the native Astra + GLM-5.3-Flash setup.
+Use only the existing GLM provider route I explicitly identify.
 Preserve my root model, reasoning effort, Router, config and authentication.
 Do not launch workers or run paid inference during installation.
 ```
