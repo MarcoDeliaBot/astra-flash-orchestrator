@@ -1,7 +1,12 @@
-# Astra + Selectable Workers
+# Astra + Selectable Workers, with a native ZCode workflow
 
 Astra plans and reviews. Choose **DeepSeek V4.1 Flash, GLM-5.3 or GLM-5.3-Flash**
 to implement, test and debug each bounded task.
+
+**Using ZCode with GLM already selected?** Use the
+[native ZCode adapter](INSTALL-IN-ZCODE.md): GLM coordinates, implements and
+reviews through `$glm-orchestrator` and a native worker. It inherits your current
+ZCode model/account and needs neither Astra nor Codex Router.
 
 This is a community fork of [Ethan Rogers' Astra Flash Orchestrator](https://github.com/ethanplusai/astra-flash-orchestrator),
 distributed under the original [MIT license](LICENSE). It preserves the original
@@ -9,6 +14,8 @@ skill and role names for compatibility and adds explicit GLM worker selection.
 
 ## What this fork adds
 
+- A native ZCode skill and worker for an entirely GLM workflow, with an offline,
+  reversible installer that preserves existing settings and credentials.
 - Six documented GLM routes through Z.ai API, Z.ai Coding Plan and Ollama Cloud.
 - An offline `python -B install.py --list-worker-routes` command.
 - Model-neutral worker instructions, exact route and effort pinning, and guarded
@@ -57,7 +64,7 @@ estimates, not ChatGPT or Codex subscription charges. Flash values use published
 off-peak and peak API rates. See the [benchmark methodology](docs/BENCHMARK.md)
 for sources, exact measurements and limitations.
 
-## How it works
+## How the Codex workflow works
 
 ```text
 Astra  →  scope + design + task brief
@@ -81,8 +88,9 @@ This is workflow guidance, not a deterministic scheduler, a security sandbox, or
 
 ### One orchestration workflow
 
-There is no mode setting or mode-switch command. The package always uses the
-usage-saving Astra → Worker → Astra workflow for substantial implementation.
+There is no mode setting or mode-switch command within the Codex skill. It uses
+the Astra → Worker → Astra workflow for substantial implementation. The separate
+ZCode adapter uses the selected GLM model for both roles.
 
 Three routing outcomes remain intentionally different:
 
@@ -93,7 +101,7 @@ Three routing outcomes remain intentionally different:
 
 Those are scope and safety decisions, not user-selectable performance modes.
 
-## Requirements
+## Codex requirements
 
 Before installing, you need:
 
@@ -135,7 +143,7 @@ installation stops instead of silently choosing another provider.
 
 The installer supports loopback Router URLs using `/v1` or `/_codex-router/<capability>/v1`. It rejects remote hosts, embedded credentials, queries, fragments and unexpected paths. Client/project/UI overrides still need checking in your actual session. Router subagent selection enables discovery; it does not prove successful inference. Some Router enable commands automatically launch paid verification, so inspect the installed version before changing selection. This installer never enables routes or runs those probes.
 
-## Install
+## Install in Codex
 
 Download this repository as a ZIP and extract it, or clone it:
 

@@ -9,8 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT_FILES = {'README.md', 'LICENSE', 'VERSION', 'INSTALL-IN-CODEX.md', 'POLICY.md',
               'WORKER-INSTRUCTIONS.md', 'SOURCES.md', 'CONTRIBUTING.md',
               'SECURITY.md', 'CHANGELOG.md', '.gitignore', 'install.py',
-              'INSTALL-IN-OPENCODE.md', 'install_opencode.py', '.gitattributes'}
-TREES = {'docs', 'skill', 'examples', 'tests', 'scripts', 'opencode'}
+              'INSTALL-IN-OPENCODE.md', 'install_opencode.py', '.gitattributes',
+              'INSTALL-IN-ZCODE.md', 'install_zcode.py'}
+TREES = {'docs', 'skill', 'examples', 'tests', 'scripts', 'opencode', 'zcode'}
 SUFFIXES = {'.md', '.py', '.json', '.yaml', '.svg'}
 
 

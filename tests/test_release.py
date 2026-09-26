@@ -10,6 +10,12 @@ spec.loader.exec_module(release)
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_zcode_adapter_is_in_distribution(self):
+        names = {p.relative_to(release.ROOT).as_posix() for p in release.selected()}
+        self.assertTrue({'install_zcode.py', 'INSTALL-IN-ZCODE.md',
+                         'zcode/skills/glm-orchestrator/SKILL.md',
+                         'zcode/agents/glm-orchestrator-builder.md'}.issubset(names))
+
     def test_opencode_adapter_is_in_distribution(self):
         names = {p.relative_to(release.ROOT).as_posix() for p in release.selected()}
         self.assertTrue({'install_opencode.py', 'INSTALL-IN-OPENCODE.md',

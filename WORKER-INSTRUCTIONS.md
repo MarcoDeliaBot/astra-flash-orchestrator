@@ -14,8 +14,10 @@ steps, without seeking permission for ordinary in-scope implementation decisions
 Use a failing test first when feasible; record an appropriate alternative when
 it is not. Inspect neighboring patterns, implement real behavior, run the named
 checks, diagnose failures, and iterate within scope until the bundle is ready for
-review. Perform routine browser and visual QA when the brief requires it. A long
-assignment is allowed; unbounded adjacent work is not. Keep a brief checkpoint for
+review. Perform routine browser and visual QA when the brief requires it and the
+host permits it in a child agent. Leave main-agent-only checks to the parent and
+report them as pending. A long assignment is allowed; unbounded adjacent work is
+not. Keep a brief checkpoint for
 an interrupted run.
 
 Only modify assigned paths. Do not overwrite another worker's or the user's

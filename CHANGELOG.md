@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.0-glm.2 - Native ZCode adapter
+
+- Add a native `glm-orchestrator` skill and `glm-orchestrator-builder` subagent
+  for using the plan, implement and review workflow entirely inside ZCode.
+- Inherit the primary session's selected model and effort; GLM can coordinate
+  and implement without Astra, Codex Router or another account connection.
+- Add an offline installer with preview, exact-file check, replacement backups,
+  idempotency and guarded undo; preserve settings, credentials and AGENTS.md.
+- Include the adapter in release archives and add installation/undo regression
+  coverage. Live inference and quality remain unverified.
+- Keep ZCode Browser Use with the coordinator, respecting the host's
+  main-agent-only boundary while delegating code and supported automated checks.
+
 ## 1.3.0-glm.1 - Community fork
 
 - Add explicit GLM-5.3 and GLM-5.3-Flash worker routes through Z.ai API,
