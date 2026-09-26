@@ -56,7 +56,7 @@ Supply the expected behavior, non-goals, relevant context, exact interface shape
 allowed paths, forbidden changes, test cases, verification commands, prerequisites,
 completion report, and stop conditions. Include short examples or pseudocode when
 a tricky contract needs them. Do not write all implementation code or dictate
-every token; reserve implementation discretion for Flash inside the contract.
+every token; reserve implementation discretion for the worker inside the contract.
 
 A long worker run should mean sustained execution of a clear assignment, not an
 unbounded self-directed project. Require a checkpoint when interrupted or blocked,

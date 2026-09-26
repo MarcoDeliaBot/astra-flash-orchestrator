@@ -24,8 +24,9 @@ code for the current task; do not paste the whole patch into chat as a ritual.
 Apply both lenses in one batched Astra review of the patch and evidence. They are
 not a requirement for two tool loops or two more agents. An independent reviewer
 may be useful for high-risk work only when its model and permissions are explicitly
-selected and its cost is justified. With Flash configured globally as the child
-default, an ordinary unnamed reviewer will not automatically be Astra.
+selected and its cost is justified. An ordinary unnamed reviewer's model depends
+on its role and host defaults; this package leaves those defaults unchanged.
+Keep acceptance with the root Astra session.
 
 ## Verify and decide
 

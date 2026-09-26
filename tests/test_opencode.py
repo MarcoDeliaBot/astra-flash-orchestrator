@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from symlink_support import create_symlink
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -132,7 +133,7 @@ class OpenCodeTests(unittest.TestCase):
     def test_symlinked_agent_directory_is_rejected(self):
         outside = self.root / 'outside'
         outside.mkdir()
-        (self.config / 'agents').symlink_to(outside, target_is_directory=True)
+        create_symlink(self.config / 'agents', outside, directory=True)
         with self.assertRaises(install.SetupError):
             opencode.plan_changes(self.config, MODEL, False)
         self.assertEqual([], list(outside.iterdir()))

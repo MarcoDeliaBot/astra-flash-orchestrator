@@ -14,3 +14,4 @@ auth.json
 astra-flash-install-backups/
 dist/
 .venv/
+.ai/

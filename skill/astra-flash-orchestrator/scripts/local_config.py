@@ -22,6 +22,12 @@ SUPPORTED_ROUTES = {
     "commandcode/deepseek-v4.1-flash": "Command Code",
     "nousresearch/deepseek-v4.1-flash": "Nous Research",
     "ollama-cloud/deepseek-v4.1-flash": "Ollama Cloud",
+    "zai-api/glm-5.3": "Z.ai API",
+    "zai-api/glm-5.3-flash": "Z.ai API",
+    "zai-coding/glm-5.3": "Z.ai Coding Plan",
+    "zai-coding/glm-5.3-flash": "Z.ai Coding Plan",
+    "ollama-cloud/glm-5.3": "Ollama Cloud",
+    "ollama-cloud/glm-5.3-flash": "Ollama Cloud",
 }
 ROLE = "astra_flash_builder"
 SKILL = "astra-flash-orchestrator"
@@ -113,7 +119,7 @@ def resolve_worker_route(requested: str | None = None, binding: Path | None = No
             raise SetupError("The existing routing binding does not name a worker model.")
     if route not in SUPPORTED_ROUTES:
         raise SetupError(
-            "Unsupported worker route. Choose a reviewed DeepSeek V4.1 Flash route: "
+            "Unsupported worker route. Choose a documented worker route: "
             + ", ".join(SUPPORTED_ROUTES)
         )
     return route
@@ -175,7 +181,7 @@ def inspect(
             "The global default_subagent_model is not used or changed; the installed named role pins its own worker model."
         )
     if config.get("model") in SUPPORTED_ROUTES:
-        raise SetupError("The root model is Flash. Select Astra as root before installing this workflow.")
+        raise SetupError("The root model is a worker model. Select Astra as root before installing this workflow.")
 
     catalog_value = config.get("model_catalog_json")
     if not isinstance(catalog_value, str) or not catalog_value:
@@ -184,20 +190,22 @@ def inspect(
     try:
         if catalog_path.stat().st_size > 20_000_000:
             raise SetupError("The model catalog is unexpectedly large; inspect it manually.")
-        payload = json.loads(catalog_path.read_text(encoding="utf-8"))
+        catalog_bytes = catalog_path.read_bytes()
+        payload = json.loads(catalog_bytes.decode("utf-8"))
     except (OSError, json.JSONDecodeError, UnicodeError) as exc:
         raise SetupError(f"Cannot read the configured model catalog ({type(exc).__name__}).") from None
+    input_hashes[str(catalog_path)] = hashlib.sha256(catalog_bytes).hexdigest()
     matches = [entry for entry in model_entries(payload) if model_id(entry) == worker_route]
     if len(matches) != 1:
         raise SetupError(
-            f"The selected Flash V4.1 route ({worker_route}) is missing or duplicated in the local catalog. "
+            f"The selected worker route ({worker_route}) is missing or duplicated in the local catalog. "
             "Configure that exact route with the Router's own local setup, then rerun this installer. "
             "No provider was substituted."
         )
     entry = matches[0]
     if entry.get("multi_agent_version") != "v2":
         raise SetupError(
-            f"The selected Flash route ({worker_route}) exists in the catalog but is not "
+            f"The selected worker route ({worker_route}) exists in the catalog but is not "
             "advertised for native subagents "
             "(multi_agent_version must be v2). Select this exact route using your "
             "Router's documented subagent settings, republish the catalog, and fully "

@@ -9,6 +9,7 @@ import tempfile
 import tomllib
 import unittest
 from unittest.mock import patch
+from symlink_support import create_symlink
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / 'skill' / 'astra-flash-orchestrator' / 'scripts'
@@ -114,6 +115,101 @@ class SetupFixture(unittest.TestCase):
         self.assertEqual(routing['worker_model'], route)
         self.assertEqual(routing['worker_provider'], 'OpenRouter')
 
+    def test_glm_routes_install_pin_and_reuse_exact_selection(self):
+        for route in (r for r in SUPPORTED_ROUTES if '/glm-5.3' in r):
+            with self.subTest(route=route):
+                self.set_catalog_route(route)
+                result = self.cli('--worker-route', route, '--replace', '--apply')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                role = tomllib.loads((self.codex / 'agents' / f'{ROLE}.toml').read_text())
+                self.assertEqual(role['model'], route)
+                self.assertEqual(role['model_reasoning_effort'], 'high')
+                self.assertFalse(role['agents']['enabled'])
+                binding = self.home / '.agents' / 'skills' / SKILL / 'routing.json'
+                self.assertEqual(resolve_worker_route(binding=binding), route)
+                self.assertEqual(json.loads(binding.read_text())['worker_provider'], SUPPORTED_ROUTES[route])
+                result = self.cli('--apply')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('no changes needed', result.stdout)
+                self.assertEqual(self.config.read_bytes(), self.original_config)
+
+    def test_glm_requires_exact_catalog_route_and_subagent_support(self):
+        route = 'zai-api/glm-5.3-flash'
+        for available, version in [('zai-coding/glm-5.3-flash', 'v2'), (route, 'v1')]:
+            with self.subTest(available=available, version=version):
+                self.set_catalog_route(available, version)
+                before = {str(p): p.read_bytes() for p in self.home.rglob('*') if p.is_file()}
+                result = self.cli('--worker-route', route, '--apply')
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(route, result.stderr)
+                self.assertEqual(before, {str(p): p.read_bytes() for p in self.home.rglob('*') if p.is_file()})
+
+    def test_glm_model_switch_requires_replace_and_undo_restores_deepseek(self):
+        self.apply()
+        previous_role = (self.codex / 'agents' / f'{ROLE}.toml').read_bytes()
+        route = 'zai-api/glm-5.3'
+        self.set_catalog_route(route)
+        result = self.cli('--worker-route', route, '--apply')
+        self.assertEqual(result.returncode, 2)
+        report, _ = inspect(self.home, self.codex, worker_route=route)
+        changes = install.plan_changes(self.home, self.codex, report, True, True)
+        receipt = install.apply_changes(changes, self.codex, report['input_hashes'])
+        result = self.cli('--undo', str(receipt), '--apply')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.codex / 'agents' / f'{ROLE}.toml').read_bytes(), previous_role)
+        binding = self.home / '.agents' / 'skills' / SKILL / 'routing.json'
+        self.assertEqual(resolve_worker_route(binding=binding), ROUTE)
+
+    def test_glm_effort_comes_from_catalog_and_mismatch_is_rejected(self):
+        route = 'zai-coding/glm-5.3'
+        self.set_catalog_route(route)
+        payload = json.loads(self.catalog.read_text())
+        payload['models'][0]['default_reasoning_level'] = 'low'
+        payload['models'][0]['supported_reasoning_levels'] = ['low', 'high', 'max']
+        self.catalog.write_text(json.dumps(payload))
+        report, _ = inspect(self.home, self.codex, worker_route=route)
+        self.assertEqual(report['worker_effort'], 'low')
+        self.assertFalse(report['runtime_verified'])
+        self.assertFalse(report['inference_request_made'])
+        payload['models'][0]['default_reasoning_level'] = 'medium'
+        self.catalog.write_text(json.dumps(payload))
+        with self.assertRaisesRegex(SetupError, 'supported efforts'):
+            inspect(self.home, self.codex, worker_route=route)
+
+    def test_route_listing_needs_no_config_and_does_not_write(self):
+        self.config.unlink()
+        before = {str(p): p.read_bytes() for p in self.home.rglob('*') if p.is_file()}
+        result = self.cli('--list-worker-routes')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        listing = json.loads(result.stdout)
+        self.assertEqual(listing['default'], ROUTE)
+        self.assertEqual(listing['routes'], SUPPORTED_ROUTES)
+        self.assertFalse(listing['runtime_verified'])
+        self.assertEqual(before, {str(p): p.read_bytes() for p in self.home.rglob('*') if p.is_file()})
+
+    def test_route_listing_rejects_mutating_options(self):
+        for option in ('--apply', '--replace'):
+            with self.subTest(option=option):
+                result = self.cli('--list-worker-routes', option)
+                self.assertEqual(result.returncode, 2)
+                self.assertFalse((self.home / '.agents').exists())
+
+    def test_installed_doctor_reuses_glm_binding_without_runtime_claim(self):
+        route = 'zai-api/glm-5.3-flash'
+        self.set_catalog_route(route)
+        result = self.cli('--worker-route', route, '--apply')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        doctor = self.home / '.agents' / 'skills' / SKILL / 'scripts' / 'doctor.py'
+        result = subprocess.run([sys.executable, '-B', str(doctor), '--home', str(self.home),
+                                 '--codex-home', str(self.codex)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report['worker_model'], route)
+        self.assertEqual(report['worker_provider'], 'Z.ai API')
+        self.assertFalse(report['runtime_verified'])
+        self.assertFalse(report['inference_request_made'])
+        self.assertNotIn('TEST_PRIVATE_CAPABILITY', result.stdout + result.stderr)
+
     def test_existing_alternate_binding_is_reused_on_update(self):
         route = 'openrouter/deepseek-v4.1-flash'
         self.set_catalog_route(route)
@@ -213,12 +309,13 @@ class SetupFixture(unittest.TestCase):
         self.assertIn('Do not run subagents certify', result.stderr)
         self.assertFalse((self.home / '.agents').exists())
 
-    def test_flash_root_is_rejected_for_every_supported_provider(self):
-        route = 'openrouter/deepseek-v4.1-flash'
-        self.set_catalog_route(route)
-        self.config.write_text(self.config.read_text().replace('fixture-astra-root', route))
-        with self.assertRaisesRegex(SetupError, 'root model is Flash'):
-            inspect(self.home, self.codex, worker_route=route)
+    def test_worker_root_is_rejected_for_every_supported_route(self):
+        for route in SUPPORTED_ROUTES:
+            with self.subTest(route=route):
+                self.set_catalog_route(route)
+                self.config.write_bytes(self.original_config.replace(b'fixture-astra-root', route.encode()))
+                with self.assertRaisesRegex(SetupError, 'root model is a worker model'):
+                    inspect(self.home, self.codex, worker_route=route)
 
     def test_non_loopback_route_fails_without_exposing_url(self):
         self.config.write_text(self.config.read_text().replace('127.0.0.1', 'private.remote.test'))
@@ -361,7 +458,7 @@ class SetupFixture(unittest.TestCase):
     def test_symlink_destination_is_refused(self):
         external = self.home / 'external'
         external.mkdir()
-        (self.home / '.agents').symlink_to(external, target_is_directory=True)
+        create_symlink(self.home / '.agents', external, directory=True)
         with self.assertRaises(SetupError):
             self.changes()
 
@@ -458,6 +555,16 @@ class SetupFixture(unittest.TestCase):
         with self.assertRaises(SetupError):
             install.apply_changes(changes, self.codex, report['input_hashes'])
 
+    def test_catalog_changed_after_preflight_blocks_all_writes(self):
+        report = self.report()
+        changes = self.changes()
+        self.set_catalog_route('zai-api/glm-5.3')
+        with self.assertRaisesRegex(SetupError, 'model catalog changed'):
+            install.apply_changes(changes, self.codex, report['input_hashes'])
+        for change in changes:
+            self.assertEqual(install.contents(change['path']), change['before'])
+        self.assertFalse((self.codex / 'astra-flash-install-backups').exists())
+
 
 class PolicyTests(unittest.TestCase):
     def test_worker_route_resolution_defaults_and_reuses_valid_binding(self):
@@ -485,7 +592,7 @@ class PolicyTests(unittest.TestCase):
             target = root / 'target.json'
             target.write_text(json.dumps({'worker_model': ROUTE}))
             binding = root / 'routing.json'
-            binding.symlink_to(target)
+            create_symlink(binding, target)
             with self.assertRaisesRegex(SetupError, 'symlinked routing binding'):
                 resolve_worker_route(binding=binding)
 

@@ -1,29 +1,36 @@
-# Astra Flash Orchestrator
+# Astra + Selectable Workers
 
-**OpenCode support:** use the same planning, implementation and review workflow
-with native OpenCode agents. See [Install in OpenCode](INSTALL-IN-OPENCODE.md).
-The OpenCode adapter uses your selected primary model and an explicitly chosen
-worker model; it works with the OpenCode desktop app without a separately
-installed CLI. The guide includes file-only setup without Python. It does not
-require Codex Router. The Codex instructions and
-benchmark results below remain specific to the original Codex workflow.
+Astra plans and reviews. Choose **DeepSeek V4.1 Flash, GLM-5.3 or GLM-5.3-Flash**
+to implement, test and debug each bounded task.
 
-**Save Astra for the decisions that need it. Let DeepSeek V4.1 Flash do the volume.**
+This is a community fork of [Ethan Rogers' Astra Flash Orchestrator](https://github.com/ethanplusai/astra-flash-orchestrator),
+distributed under the original [MIT license](LICENSE). It preserves the original
+skill and role names for compatibility and adds explicit GLM worker selection.
 
-![Astra Flash Orchestrator measured efficiency](docs/assets/astra-savings-v2.svg)
+## What this fork adds
 
-A personal Codex skill designed to preserve Astra usage without giving up Astra's
-judgment. Astra stays responsible for planning, architecture, high-stakes
-decisions and final review. DeepSeek V4.1 Flash takes the high-volume work:
-repository discovery, implementation, testing, debugging and routine verification.
+- Six documented GLM routes through Z.ai API, Z.ai Coding Plan and Ollama Cloud.
+- An offline `python -B install.py --list-worker-routes` command.
+- Model-neutral worker instructions, exact route and effort pinning, and guarded
+  model changes using the existing replacement/undo workflow.
+- Refusal to install if the inspected model catalog changes before files are written.
+- Additional regression tests and Linux/Windows CI with reproducible text files.
 
-Bring an existing plan or start with a feature request. The workflow turns it
-into coherent implementation bundles, sends those bundles to Flash, then returns
-the completed patch and evidence to Astra for one focused acceptance pass.
+Read [Choose the implementation model](docs/WORKER-MODELS.md) for GLM examples,
+model changes, provider distinctions and verification limits. DeepSeek remains
+the first-install default; existing installations retain their selected route.
 
-> **Status:** early release. Offline installation tests pass, and the workflow has completed a measured local field build. Results below describe that run, not guaranteed savings. A new installation still needs runtime routing verification on its first authorized task. Installation never runs paid inference.
+**Validation status:** GLM installation and configuration are covered by offline
+tests. Live GLM routing, output quality and cost savings have not been measured
+for this fork. No model inference is performed by the installer or test suite.
 
-## Measured efficiency
+OpenCode users can use the existing [native OpenCode adapter](INSTALL-IN-OPENCODE.md),
+which inherits the selected primary model and requires an explicit worker model.
+OpenCode IDs must come from OpenCode's own model list; Codex Router is not required.
+
+## Historical upstream DeepSeek benchmark
+
+**These upstream measurements do not apply to GLM workers.**
 
 In one substantial field build, Astra Flash Orchestrator used **98.9% less Astra
 input per 1,000 implementation and test lines** than the all-Astra baseline. It
@@ -54,7 +61,7 @@ for sources, exact measurements and limitations.
 
 ```text
 Astra  →  scope + design + task brief
-Flash  →  implement + test + report
+Worker →  implement + test + report
 Astra  →  review + verify + accept or request fixes
        →  integrate + checkpoint + next task
 ```
@@ -63,7 +70,7 @@ Astra  →  review + verify + accept or request fixes
 - **Coherent assignments:** one feature slice can include many edit/test/fix steps.
 - **Focused Astra root:** normally one planning batch, one dispatch, one wait, one
   batched acceptance review and one final response.
-- **Worker-owned execution:** Flash handles in-scope discovery, implementation,
+- **Worker-owned execution:** the selected worker handles in-scope discovery, implementation,
   testing, debugging and routine browser/visual QA without progress polling.
 - **Review before acceptance:** the builder submits evidence; Astra decides whether it is complete.
 - **Existing plans welcome:** works with repository plans, Superpowers/GSD artifacts, or the included templates.
@@ -75,11 +82,11 @@ This is workflow guidance, not a deterministic scheduler, a security sandbox, or
 ### One orchestration workflow
 
 There is no mode setting or mode-switch command. The package always uses the
-usage-saving Astra → Flash → Astra workflow for substantial implementation.
+usage-saving Astra → Worker → Astra workflow for substantial implementation.
 
 Three routing outcomes remain intentionally different:
 
-- Substantial implementation uses Astra to plan and review while Flash builds.
+- Substantial implementation uses Astra to plan and review while the selected worker builds.
 - Trivial work and explicit single-agent requests stay with the root session.
 - Concrete security, architecture, payments, tenancy, secrets, migration or
   production risk can justify targeted additional Astra review.
@@ -93,7 +100,7 @@ Before installing, you need:
 1. A Codex client that supports native subagents and standalone custom agent TOML files under `$CODEX_HOME/agents/`.
 2. GPT-6 Astra selected as the root model.
 3. Python **3.11 or newer**. No third-party Python dependencies are needed.
-4. An existing [Codex Router installation](https://github.com/duolahypercho/codex-router), configured and authenticated for one reviewed DeepSeek V4.1 Flash route below.
+4. An existing [Codex Router installation](https://github.com/duolahypercho/codex-router), configured and authenticated for one documented DeepSeek or GLM worker route.
 5. A local Codex model catalog advertising that exact route with `multi_agent_version: "v2"`.
 
 | Provider | Worker route |
@@ -104,6 +111,9 @@ Before installing, you need:
 | Command Code | `commandcode/deepseek-v4.1-flash` |
 | Nous Research | `nousresearch/deepseek-v4.1-flash` |
 | Ollama Cloud | `ollama-cloud/deepseek-v4.1-flash` |
+| Z.ai API | `zai-api/glm-5.3` or `zai-api/glm-5.3-flash` |
+| Z.ai Coding Plan | `zai-coding/glm-5.3` or `zai-coding/glm-5.3-flash` |
+| Ollama Cloud | `ollama-cloud/glm-5.3` or `ollama-cloud/glm-5.3-flash` |
 
 Provider credentials are entered by you through Codex Router's private local
 prompt before installing this package. Never paste an API key into an assistant
@@ -120,7 +130,7 @@ installer creates a named `astra_flash_builder` role that pins its own route and
 catalog-supported effort, so unrelated subagents keep their existing defaults.
 The installer **does not install the Router, add credentials, select your root
 model, or rewrite `config.toml`**. Direct DeepSeek remains the default. Any other
-provider requires an explicit `--worker-route`; if that route is unavailable,
+model/provider requires an explicit `--worker-route`; if that route is unavailable,
 installation stops instead of silently choosing another provider.
 
 The installer supports loopback Router URLs using `/v1` or `/_codex-router/<capability>/v1`. It rejects remote hosts, embedded credentials, queries, fragments and unexpected paths. Client/project/UI overrides still need checking in your actual session. Router subagent selection enables discovery; it does not prove successful inference. Some Router enable commands automatically launch paid verification, so inspect the installed version before changing selection. This installer never enables routes or runs those probes.
@@ -130,7 +140,7 @@ The installer supports loopback Router URLs using `/v1` or `/_codex-router/<capa
 Download this repository as a ZIP and extract it, or clone it:
 
 ```sh
-git clone https://github.com/ethanplusai/astra-flash-orchestrator.git
+git clone https://github.com/MarcoDeliaBot/astra-flash-orchestrator.git
 cd astra-flash-orchestrator
 ```
 
@@ -188,7 +198,7 @@ For a nondefault profile, pass `--profile PROFILE` to the dry run, apply and doc
 | Location | Installed content |
 | --- | --- |
 | `~/.agents/skills/astra-flash-orchestrator/` | Skill, references, templates, doctor, plan validator and routing binding |
-| `$CODEX_HOME/agents/astra_flash_builder.toml` | Native builder pinned to Flash; nested agents disabled |
+| `$CODEX_HOME/agents/astra_flash_builder.toml` | Native builder pinned to the selected worker model; nested agents disabled |
 | `$CODEX_HOME/AGENTS.md` | A marked, scoped workflow policy block |
 | `$CODEX_HOME/astra-flash-install-backups/` | Original files and an undo receipt |
 
@@ -203,7 +213,7 @@ Root model/effort, provider configuration, authentication and existing permissio
 ```text
 $astra-flash-orchestrator Use the existing plan in docs/plan.md to implement
 this feature. Keep Astra focused on planning and final review. Use one installed
-Flash builder for a coherent implementation and verification bundle. Do not poll
+worker builder for a coherent implementation and verification bundle. Do not poll
 the worker; review its completed patch and evidence in one batched pass.
 ```
 

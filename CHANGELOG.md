@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0-glm.1 - Community fork
+
+- Add explicit GLM-5.3 and GLM-5.3-Flash worker routes through Z.ai API,
+  Z.ai Coding Plan and Ollama Cloud; preserve the DeepSeek default.
+- Add offline route listing and neutral worker instructions while retaining
+  installed skill/role names and plan schema compatibility.
+- Recheck the model catalog hash before installation, preserving the verified
+  route and effort when another process updates the catalog.
+- Add GLM install/update/replace/undo regression tests, Linux/Windows CI and
+  explicit skips for OS accounts unable to create symlinks.
+- Normalize distributed text to LF for cross-platform release checks.
+- Document attribution and distinguish offline validation from unmeasured live
+  GLM routing, quality and cost.
+
 ## Unreleased
 
 - Document desktop-only OpenCode setup, make CLI model listing optional, and

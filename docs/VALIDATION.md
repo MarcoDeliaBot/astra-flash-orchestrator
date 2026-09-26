@@ -1,5 +1,28 @@
 # Validation evidence
 
+## Community fork: 1.3.0-glm.1
+
+Checked September 26, 2026 on Windows with Python 3.11.9. The offline suite
+covers the GLM routes, saved model/provider selection, effort, replacement/undo,
+installed doctor, and catalog changes before writes. Tests use temporary
+synthetic homes and do not make inference requests.
+
+The upstream baseline ran 77 tests: 73 passed and four could not create symlink
+fixtures because the Windows account lacks that privilege. This fork reports
+that platform limitation as an explicit skip, preserving the real symlink checks
+for environments that support them. See the test output and GitHub Actions for
+the current total and each platform's outcome.
+
+Linux/Windows CI is configured for Python 3.11 and 3.13. Configuration of CI alone
+does not establish a passing run. Release inventories use LF text and explicit
+portable path ordering so the same sources can be checked across platforms.
+
+No live GLM inference, end-to-end client routing, model quality or cost comparison
+has been performed for this fork. The historical evidence below belongs to the
+upstream project and must not be interpreted as validation of GLM workers.
+
+## Historical upstream evidence
+
 Unreleased candidate based on version 1.2.0. Checked September 20, 2026 on macOS
 with Python 3.14.3.
 

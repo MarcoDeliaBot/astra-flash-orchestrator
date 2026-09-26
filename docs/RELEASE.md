@@ -4,13 +4,13 @@ Suggested repository name: **astra-flash-orchestrator**
 
 Suggested GitHub description:
 
-> Astra plans and reviews; DeepSeek Flash builds. A native Codex workflow with phased tasks, verification, safe installation and reversible setup.
+> Astra plans and reviews; choose DeepSeek V4.1 Flash, GLM-5.3 or GLM-5.3-Flash to build. Community fork with explicit worker selection and reversible setup.
 
-Suggested topics: `codex`, `codex-skills`, `deepseek`, `ai-agents`, `developer-tools`, `agent-orchestration`.
+Suggested topics: `codex`, `codex-skills`, `deepseek`, `glm`, `ai-agents`, `developer-tools`, `agent-orchestration`.
 
 ## Before publishing
 
-1. Confirm the distribution license with the maintainer and include LICENSE.
+1. Preserve the upstream MIT LICENSE and copyright, and identify the upstream project and fork changes.
 2. Run the offline tests and release integrity check. Review the selected release files for secrets, local paths and private instructions.
 3. Review README claims against `docs/BENCHMARK.md`. Keep measured results scoped
    to the documented field run and do not present projections as guaranteed savings.

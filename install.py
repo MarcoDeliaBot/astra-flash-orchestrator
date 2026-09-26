@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Preview/install the Astra + Flash skill without changing Codex model/provider settings."""
+"""Preview/install Astra with a selected worker without changing Codex model/provider settings."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -18,7 +18,7 @@ sys.dont_write_bytecode = True
 BUNDLE = Path(__file__).resolve().parent
 SKILL_SOURCE = BUNDLE / "skill" / "astra-flash-orchestrator"
 sys.path.insert(0, str(SKILL_SOURCE / "scripts"))
-from local_config import SetupError, default_locations, inspect, resolve_worker_route, ROLE, SKILL, SUPPORTED_ROUTES
+from local_config import SetupError, default_locations, inspect, resolve_worker_route, ROLE, ROUTE, SKILL, SUPPORTED_ROUTES
 
 BEGIN = b"<!-- BEGIN astra-flash-orchestrator managed policy -->"
 END = b"<!-- END astra-flash-orchestrator managed policy -->"
@@ -100,7 +100,7 @@ def plan_changes(home: Path, codex_home: Path, report: dict, with_policy: bool, 
     # JSON basic strings are valid TOML basic strings for these generated values.
     role = (
         f'name = {json.dumps(ROLE)}\n'
-        'description = "Implement an Astra-approved task bundle using the installed Flash route; never orchestrate or self-approve."\n'
+        'description = "Implement an Astra-approved task bundle using the installed worker route; never orchestrate or self-approve."\n'
         f'model = {json.dumps(report["worker_model"])}\n'
     )
     if report["worker_effort"]:
@@ -130,7 +130,7 @@ def apply_changes(changes: list[dict], codex_home: Path, input_hashes: dict[str,
         return None
     for name, expected in input_hashes.items():
         if digest(Path(name).read_bytes()) != expected:
-            raise SetupError("The Codex configuration changed during inspection. Rerun the installer.")
+            raise SetupError("The Codex configuration or model catalog changed during inspection. Rerun the installer.")
     for change in changes:
         if contents(change["path"]) != change["before"]:
             raise SetupError("An installation target changed during inspection. Rerun the installer.")
@@ -238,10 +238,16 @@ def main() -> int:
     parser.add_argument(
         "--worker-route",
         choices=SUPPORTED_ROUTES,
-        help="pin one reviewed DeepSeek V4.1 Flash provider route (default: existing binding, then direct DeepSeek API)",
+        help="pin a documented DeepSeek or GLM worker route (default: existing binding, then direct DeepSeek API)",
     )
+    parser.add_argument("--list-worker-routes", action="store_true", help="list supported route IDs offline without reading local configuration")
     parser.add_argument("--undo", type=Path, metavar="RECEIPT", help="preview restoration from an installation receipt; combine with --apply to restore")
     args = parser.parse_args()
+    if args.list_worker_routes:
+        if args.apply or args.undo or args.replace or args.worker_route:
+            parser.error("--list-worker-routes cannot be combined with installation, replacement, undo or route selection")
+        print(json.dumps({"default": ROUTE, "routes": SUPPORTED_ROUTES, "runtime_verified": False}, indent=2))
+        return 0
     try:
         home, codex_home = default_locations(args.home, args.codex_home)
         if args.undo:

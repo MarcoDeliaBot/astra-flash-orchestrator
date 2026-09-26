@@ -38,3 +38,15 @@ Router. Upstream documentation and local client behavior may change independentl
 ## Provenance
 
 The package contains original workflow instructions and Python utilities. Its design was informed by a private prototype review and the public references above. Private attachments, prototype runner code, local configuration and personal review notes are not distributed. Upstream projects are referenced, not bundled or relicensed.
+
+## GLM extension in the community fork
+
+Model identifiers and documented routes checked September 26, 2026:
+- [Z.ai GLM repository](https://github.com/zai-org/GLM-5): GLM-5.3 and
+  GLM-5.3-Flash model identity and supported reasoning levels.
+- [Codex Router model table](https://github.com/duolahypercho/codex-router#models-and-authentication):
+  `zai-api`, `zai-coding` and `ollama-cloud` routes for both models.
+
+These are documentation checks, not live inference verification. Original
+copyright and MIT license are retained; the fork does not claim ownership of
+the upstream project or endorsement by OpenAI, Z.ai, DeepSeek or Codex Router.

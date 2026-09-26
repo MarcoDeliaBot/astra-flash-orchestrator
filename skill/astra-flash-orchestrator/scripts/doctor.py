@@ -27,7 +27,7 @@ def check_local_catalog(url: str, worker_route: str) -> None:
             raise SetupError("Local model response exceeded its size limit.")
         entries = model_entries(json.loads(body))
         if not any(model_id(entry) == worker_route for entry in entries):
-            raise SetupError("The live local catalog does not advertise the requested Flash route.")
+            raise SetupError("The live local catalog does not advertise the requested worker route.")
     except (OSError, urllib.error.URLError, json.JSONDecodeError, UnicodeError) as exc:
         raise SetupError(f"Local catalog check failed ({type(exc).__name__}); private URL withheld.") from None
 
@@ -40,7 +40,7 @@ def main() -> int:
     parser.add_argument(
         "--worker-route",
         choices=SUPPORTED_ROUTES,
-        help="check a reviewed route (default: installed routing binding, then direct DeepSeek API)",
+        help="check a documented DeepSeek or GLM route (default: installed routing binding, then direct DeepSeek API)",
     )
     parser.add_argument(
         "--check-local-router",

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT_FILES = {'README.md', 'LICENSE', 'VERSION', 'INSTALL-IN-CODEX.md', 'POLICY.md',
               'WORKER-INSTRUCTIONS.md', 'SOURCES.md', 'CONTRIBUTING.md',
               'SECURITY.md', 'CHANGELOG.md', '.gitignore', 'install.py',
-              'INSTALL-IN-OPENCODE.md', 'install_opencode.py'}
+              'INSTALL-IN-OPENCODE.md', 'install_opencode.py', '.gitattributes'}
 TREES = {'docs', 'skill', 'examples', 'tests', 'scripts', 'opencode'}
 SUFFIXES = {'.md', '.py', '.json', '.yaml', '.svg'}
 
@@ -24,13 +24,15 @@ def selected(root=ROOT):
             continue
         if not p.is_file():
             continue
-        if any(part.startswith('.') or part == '__pycache__' for part in rel.parts) and rel.as_posix() != '.gitignore':
+        if any(part.startswith('.') or part == '__pycache__' for part in rel.parts) and rel.as_posix() not in {'.gitignore', '.gitattributes'}:
             continue
         if '.before-' in p.name or p.name in {'routing.json', 'receipt.json', 'auth.json'}:
             continue
         if rel.as_posix() in ROOT_FILES or (rel.parts[0] in TREES and p.suffix in SUFFIXES):
             files.append(p)
-    return sorted(files)
+    # Path ordering is case-insensitive on Windows, but not on POSIX.
+    # Sort portable archive names so identical sources have identical inventories.
+    return sorted(files, key=lambda p: p.relative_to(root).as_posix())
 
 
 def inventory(root=ROOT):
@@ -49,7 +51,7 @@ def main():
             raise SystemExit('Inventory stale. Review changes, then run python3 -B scripts/release.py.')
         print(f'Inventory valid: {len(selected())} files.')
     else:
-        manifest.write_text(expected)
+        manifest.write_text(expected, encoding='utf-8', newline='\n')
         print(f'Inventory written: {len(selected())} files.')
     if args.zip:
         version = (ROOT / 'VERSION').read_text().strip()

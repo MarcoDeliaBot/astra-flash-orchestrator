@@ -7,17 +7,28 @@ The installed setup has three separate jobs:
 3. This skill tells Astra when to plan, delegate, review, and integrate.
 
 As documented on September 20, 2026, the vendor API's `deepseek-flash` name
-corresponds to V4.1 Flash. Codex Router exposes reviewed routes through DeepSeek,
+corresponds to DeepSeek V4.1 Flash. Codex Router exposes reviewed routes through DeepSeek,
 OpenRouter, opencode Go, Command Code, Nous Research and Ollama Cloud. The
 installed `routing.json` records the exact selected route and provider. Do not
 substitute an upstream vendor name in the role's model field. See `sources.md`
 for the public references.
 
+## GLM worker routes in this fork
+
+GLM-5.3 and GLM-5.3-Flash can be selected through `zai-api`, `zai-coding` or
+`ollama-cloud`, using exact IDs such as `zai-api/glm-5.3` and
+`zai-api/glm-5.3-flash`. The six combinations are documented by Codex Router.
+The installed catalog must contain the chosen exact ID and advertise native
+subagent support; these documented IDs alone do not prove working inference.
+Keep Z.ai API and Coding Plan selections distinct. Worker effort comes from the
+selected catalog entry; never reuse an effort merely because DeepSeek used it.
+
 ## Installation bindings
 
-The installer uses direct DeepSeek by default or the reviewed route explicitly
-passed with `--worker-route`, then verifies that exact entry exists in the local
-model catalog with `multi_agent_version: "v2"`. It never auto-selects a provider.
+The installer uses direct DeepSeek by default or the documented route explicitly
+passed with `--worker-route`, including GLM routes. It verifies that exact entry
+exists in the local model catalog with `multi_agent_version: "v2"`.
+It never auto-selects a provider.
 On later updates and doctor runs, a valid installed `routing.json` preserves that
 choice when the option is omitted. It writes a standalone personal agent with the
 name `astra_flash_builder` and pins both its route and the catalog's supported
@@ -51,7 +62,7 @@ on guesswork, silently upgrade software, or fall back to an expensive agent.
 For the first real delegated task, verify all of the following:
 
 - Root thread still shows Astra; child thread/session metadata shows the exact
-  Flash route or an equivalent documented provider mapping.
+  worker route or an equivalent documented provider mapping.
 - Router request/usage metadata confirms the selected provider and upstream model
   for that child request. Do not paste private caller URLs, tokens, or raw logs.
 - The child actually executes a small useful task, changes only its scope, and
