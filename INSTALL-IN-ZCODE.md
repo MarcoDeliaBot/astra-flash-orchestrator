@@ -37,14 +37,16 @@ python -B install_zcode.py --check
 The first command previews; the second writes these two definitions plus an
 undo receipt under `~/.zcode/astra-flash-install-backups/`:
 
-- `~/.agents/skills/astra-glm-orchestrator/SKILL.md` for Codex.
+- `~/.codex/skills/astra-glm-orchestrator/SKILL.md` for Codex (or under
+  `CODEX_HOME/skills` when configured). This avoids ZCode's shared skill discovery.
 - `~/.zcode/skills/glm-worker/SKILL.md` for ZCode.
 
 Existing files with different contents require an explicit `--replace` after
 review and are backed up. Repeating the same installation is a no-op. Settings,
 credentials, AGENTS.md and unrelated skills/agents are preserved. Use `--home`
-for the Codex skill's user home and `--zcode-home` for ZCode's configuration
-directory when overriding locations; pass the same options to check and undo.
+for the default user home and legacy lookup, `CODEX_HOME` for a custom Codex
+directory, and `--zcode-home` for ZCode's configuration directory. Keep these
+locations consistent for check and undo.
 The check verifies file contents and absence of obsolete coordinator definitions,
 not app discovery, model selection or successful inference. Setup makes no model
 requests and does not submit a task in either app.
@@ -67,6 +69,11 @@ Migration creates the two correct skills and backs up/removes only the old
 customized old definitions stop the entire change for manual reconciliation.
 Other files in those directories are preserved. `--replace` does not override
 the protection for customized obsolete definitions.
+
+The same migration also moves the known 1.3.0-glm.3 Astra skill out of the shared
+`~/.agents/skills/astra-glm-orchestrator/SKILL.md` location into Codex's own skill
+directory. This prevents its automatic discovery in ZCode. A customized shared
+copy is preserved and requires manual reconciliation.
 
 ## Start using it
 
@@ -119,8 +126,9 @@ python -B install_zcode.py --undo PATH_TO_RECEIPT
 python -B install_zcode.py --undo PATH_TO_RECEIPT --apply
 ```
 
-Undo is restricted to the two new skill paths and the two legacy definition
-paths. Undoing a migration restores the former GLM coordinator files and removes
+Undo is restricted to the two new skill paths, the two legacy GLM definitions,
+and the former shared Astra skill path. Undoing a migration restores retired
+files and removes
 newly created skills; use it only when that rollback is intended. Later user edits
 or recreated legacy files block undo before restoration. Empty directories may
 remain. No unrelated files or model/account settings are changed.

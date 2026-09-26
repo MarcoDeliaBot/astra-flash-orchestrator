@@ -15,6 +15,7 @@ from install import BUNDLE, SetupError, apply_changes, contents, digest, no_syml
 
 ORCHESTRATOR = "astra-glm-orchestrator"
 WORKER = "glm-worker"
+SHARED_COORDINATOR_HASH = "8af5a7964972c4addefaceb46b110a4ed363316bc3c7e407a904484321e6d66e"
 # Published v1.3.0-glm.2 plus the initial local build. Never retire unknown edits.
 LEGACY_HASHES = {
     "skills/glm-orchestrator/SKILL.md": {
@@ -42,26 +43,31 @@ def user_home(requested: str | None) -> Path:
     return path
 
 
+def coordinator_file(home: Path) -> Path:
+    codex_home = Path(os.environ.get("CODEX_HOME") or home / ".codex").expanduser()
+    return Path(os.path.abspath(codex_home)) / "skills" / ORCHESTRATOR / "SKILL.md"
+
+
 def target_files(home: Path, directory: Path) -> set[Path]:
-    return {home / ".agents" / "skills" / ORCHESTRATOR / "SKILL.md",
+    return {coordinator_file(home),
             directory / "skills" / WORKER / "SKILL.md"}
 
 
-def legacy_files(directory: Path) -> set[Path]:
-    return {directory / name for name in LEGACY_HASHES}
+def legacy_definitions(home: Path, directory: Path) -> dict[Path, set[str]]:
+    return {**{directory / name: hashes for name, hashes in LEGACY_HASHES.items()},
+            home / ".agents" / "skills" / ORCHESTRATOR / "SKILL.md": {SHARED_COORDINATOR_HASH}}
+
+
+def legacy_files(home: Path, directory: Path) -> set[Path]:
+    return set(legacy_definitions(home, directory))
 
 
 def plan_changes(home: Path, directory: Path, replace: bool = False,
                  migrate_legacy: bool = False) -> list[dict]:
     no_symlinks(home)
     no_symlinks(directory)
-    codex_home = Path(os.environ.get("CODEX_HOME") or home / ".codex").expanduser()
-    duplicate = codex_home / "skills" / ORCHESTRATOR
-    no_symlinks(duplicate)
-    if duplicate.exists():
-        raise SetupError(f"Another copy exists at {duplicate}. Reconcile duplicate skill locations first.")
     requested = {
-        home / ".agents" / "skills" / ORCHESTRATOR / "SKILL.md":
+        coordinator_file(home):
             BUNDLE / "handoff" / "skills" / ORCHESTRATOR / "SKILL.md",
         directory / "skills" / WORKER / "SKILL.md":
             BUNDLE / "zcode" / "skills" / WORKER / "SKILL.md",
@@ -79,13 +85,12 @@ def plan_changes(home: Path, directory: Path, replace: bool = False,
             raise SetupError(f"Different content already exists at {path}. Review it, then use --replace to back it up and update it.")
         changes.append({"path": path, "before": before, "after": after,
                         "mode": path.stat().st_mode & 0o777 if before is not None else 0o600})
-    for name, known_hashes in LEGACY_HASHES.items():
-        path = directory / name
+    for path, known_hashes in legacy_definitions(home, directory).items():
         before = contents(path)
         if before is None:
             continue
         if not migrate_legacy:
-            raise SetupError("Obsolete GLM orchestration is installed. Review --migrate-legacy to back up and retire it before installing Astra coordination.")
+            raise SetupError("Obsolete GLM orchestration or a shared Astra skill is installed. Review --migrate-legacy to back up and retire it before installing Codex-only Astra coordination.")
         if digest(before.replace(b"\r\n", b"\n")) not in known_hashes:
             raise SetupError(f"Obsolete definition has unknown or customized content: {path}. Preserve/reconcile it manually; --replace does not authorize deleting it.")
         changes.append({"path": path, "before": before, "after": None,
@@ -95,7 +100,7 @@ def plan_changes(home: Path, directory: Path, replace: bool = False,
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--home", help="user home for the Codex skill at HOME/.agents/skills")
+    parser.add_argument("--home", help="user home for legacy lookup and default HOME/.codex skill location; CODEX_HOME overrides the Codex directory")
     parser.add_argument("--zcode-home", help="explicit user configuration directory; default ~/.zcode")
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--apply", action="store_true", help="write changes; otherwise preview only")
@@ -113,16 +118,16 @@ def main() -> int:
         directory = config_directory(args.zcode_home)
         if args.undo:
             undo_files(args.undo.expanduser().absolute(), directory, args.apply,
-                       tree=None, files=target_files(home, directory) | legacy_files(directory))
+                       tree=None, files=target_files(home, directory) | legacy_files(home, directory))
             return 0
         changes = plan_changes(home, directory, args.replace, args.migrate_legacy)
         if args.check:
             if changes:
                 raise SetupError("Handoff adapter is missing or differs from this bundle. Preview installation first.")
-            print("Both skills match this bundle and obsolete GLM coordinator definitions are absent.")
+            print("Both skills match this bundle; obsolete GLM and shared coordinator definitions are absent.")
             print("Dispatch between apps is manual; live execution and selected models remain unverified.")
             return 0
-        print(f"Codex skill home: {home / '.agents' / 'skills'}")
+        print(f"Codex coordinator: {coordinator_file(home)}")
         print(f"ZCode home: {directory}")
         print(f"Orchestrator: Astra in Codex (${ORCHESTRATOR})")
         print(f"Worker: GLM-5.3-Flash in ZCode (${WORKER})")

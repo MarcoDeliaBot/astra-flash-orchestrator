@@ -20,9 +20,11 @@ class ZCodeTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name).resolve()
+        self.env = patch.dict('os.environ', {'CODEX_HOME': str(self.root / '.codex')})
+        self.env.start()
         self.config = self.root / '.zcode'
         self.config.mkdir()
-        self.orchestrator = self.root / '.agents' / 'skills' / zcode.ORCHESTRATOR / 'SKILL.md'
+        self.orchestrator = self.root / '.codex' / 'skills' / zcode.ORCHESTRATOR / 'SKILL.md'
         self.skill = self.config / 'skills' / zcode.WORKER / 'SKILL.md'
         self.settings = self.config / 'v2' / 'config.json'
         self.settings.parent.mkdir()
@@ -32,6 +34,7 @@ class ZCodeTests(unittest.TestCase):
         (self.root / '.codex' / 'config.toml').write_text('model = "existing-astra"\n')
 
     def tearDown(self):
+        self.env.stop()
         self.temp.cleanup()
 
     def cli(self, *args):
@@ -189,7 +192,7 @@ class ZCodeTests(unittest.TestCase):
         receipt = self.migration()
         self.assertTrue(self.orchestrator.exists())
         self.assertTrue(self.skill.exists())
-        for path in zcode.legacy_files(self.config):
+        for path in zcode.legacy_files(self.root, self.config):
             self.assertFalse(path.exists())
         self.assertEqual(self.cli('--check').returncode, 0)
         result = self.cli('--undo', str(receipt), '--apply')
@@ -258,7 +261,7 @@ class ZCodeTests(unittest.TestCase):
         install.apply_changes(changes, self.config, {})
         self.assertEqual(notes.read_text(), 'My notes')
 
-    def test_duplicate_codex_skill_location_is_refused(self):
+    def test_conflicting_codex_skill_is_preserved(self):
         duplicate = self.root / '.codex' / 'skills' / zcode.ORCHESTRATOR
         duplicate.mkdir(parents=True)
         (duplicate / 'SKILL.md').write_text('Personal skill')
@@ -267,6 +270,40 @@ class ZCodeTests(unittest.TestCase):
             with self.assertRaises(install.SetupError):
                 zcode.plan_changes(self.root, self.config)
         self.assertEqual(before, self.snapshot())
+
+    def test_shared_coordinator_migrates_to_codex_only_and_undo_restores_it(self):
+        shared = self.root / '.agents' / 'skills' / zcode.ORCHESTRATOR / 'SKILL.md'
+        shared.parent.mkdir(parents=True)
+        original = (ROOT / 'handoff/skills/astra-glm-orchestrator/SKILL.md').read_bytes().replace(b'\r\n', b'\n')
+        shared.write_bytes(original)
+        before = self.snapshot()
+        self.assertEqual(self.cli('--apply').returncode, 2)
+        self.assertEqual(before, self.snapshot())
+        result = self.cli('--migrate-legacy', '--apply')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.orchestrator.read_bytes(), original)
+        self.assertFalse(shared.exists())
+        self.assertEqual(self.cli('--check').returncode, 0)
+        receipt, = (self.config / 'astra-flash-install-backups').glob('*/receipt.json')
+        self.assertEqual(self.cli('--undo', str(receipt), '--apply').returncode, 0)
+        self.assertEqual(shared.read_bytes(), original)
+        self.assertFalse(self.orchestrator.exists())
+
+    def test_customized_shared_coordinator_is_preserved(self):
+        shared = self.root / '.agents' / 'skills' / zcode.ORCHESTRATOR / 'SKILL.md'
+        shared.parent.mkdir(parents=True)
+        shared.write_text('Personal coordinator skill')
+        before = self.snapshot()
+        self.assertEqual(self.cli('--migrate-legacy', '--replace', '--apply').returncode, 2)
+        self.assertEqual(before, self.snapshot())
+
+    def test_custom_codex_home_selects_only_that_destination(self):
+        custom = self.root / 'custom-codex'
+        with patch.dict('os.environ', {'CODEX_HOME': str(custom)}):
+            changes = zcode.plan_changes(self.root, self.config)
+        paths = {c['path'] for c in changes}
+        self.assertIn(custom / 'skills' / zcode.ORCHESTRATOR / 'SKILL.md', paths)
+        self.assertNotIn(self.orchestrator, paths)
 
 
 if __name__ == '__main__':

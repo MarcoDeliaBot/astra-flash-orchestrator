@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0-glm.4 - Keep Astra instructions specific to Codex
+
+- Install the coordinator in Codex's own skills directory, honoring CODEX_HOME,
+  instead of the shared .agents directory that ZCode also discovers.
+- Extend guarded migration/undo to the known interim shared coordinator file;
+  preserve customized copies and add cross-host location regression coverage.
+
 ## 1.3.0-glm.3 - Restore Astra orchestration with a GLM worker
 
 - Replace the all-GLM ZCode design with `astra-glm-orchestrator` in Codex and
