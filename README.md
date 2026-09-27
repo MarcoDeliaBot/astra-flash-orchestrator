@@ -9,17 +9,24 @@ Use the [Codex + ZCode setup](INSTALL-IN-ZCODE.md) to install
 coordinate another GLM agent. The former all-GLM adapter is withdrawn; the
 installer provides a guarded migration with backups.
 
-**Cross-app dispatch is manual:** Astra writes a task file, you send its prepared
-instruction in ZCode, GLM writes a result, and you tell Astra to review it. The
-skills do not create an automatic connection between apps or change models.
+**Automatic dispatch:** give Astra an objective. Astra starts GLM through ZCode's
+bundled runtime, receives the result, reviews the patch and sends corrections.
+The user does not copy prompts or relay results between apps. After two or three
+guided correction attempts fail, Astra can take over the remaining implementation.
 
 ```text
-Codex / Astra          -> plan + TASK.md + worker instruction
-User                  -> send the instruction in ZCode
+User                  -> objective in Codex
+Codex / Astra         -> plan + TASK.md + automatic dispatch
 ZCode / GLM-5.3-Flash  -> code + tests + RESULT.md
-User                  -> tell Astra the result is ready
-Codex / Astra          -> review actual changes + REVIEW.md + accept or correct
+Codex / Astra         -> verify + REVIEW.md + automatic corrections
+Codex / Astra         -> accept + integrate + continue toward the objective
 ```
+
+The included Python bridge uses the installed ZCode CLI **0.16.9** and an existing
+supported Z.ai Coding Plan configuration. It selects GLM-5.3-Flash explicitly;
+it does not create another orchestrator or require native GLM subagents in Codex.
+This workflow runs during the active Codex conversation, with bounded worker
+turns. It is not an always-on service.
 
 This is a community fork of [Ethan Rogers' Astra Flash Orchestrator](https://github.com/ethanplusai/astra-flash-orchestrator),
 distributed under the original [MIT license](LICENSE). It preserves the original
@@ -28,6 +35,8 @@ worker selection plus the two-app workflow above.
 
 ## What this fork adds
 
+- Automatic task dispatch, session/model checks, result collection, per-operation
+  permission review by Astra, and guided correction cycles.
 - Distinct Astra coordinator and GLM worker skills, with a reversible installer
   that preserves settings/credentials and retires the mistaken GLM coordinator.
 - Six documented GLM routes through Z.ai API, Z.ai Coding Plan and Ollama Cloud.
@@ -43,9 +52,11 @@ Router installer retains upstream route compatibility; explicitly select a GLM
 route when using that separate integration. See
 [Choose the implementation model](docs/WORKER-MODELS.md).
 
-**Validation status:** GLM installation and configuration are covered by offline
-tests. Live GLM routing, output quality and cost savings have not been measured
-for this fork. No model inference is performed by the installer or test suite.
+**Validation status:** see [the validation record](docs/VALIDATION.md) for the
+checks actually performed and their limits. Installation and automated tests
+make no model requests. The helper's offline doctor validates prerequisites;
+only an explicitly authorized worker run exercises live GLM execution. Historical
+DeepSeek savings below are not measurements of GLM cost or quality.
 
 The existing [OpenCode adapter](INSTALL-IN-OPENCODE.md) remains for compatibility.
 It uses OpenCode's own models and does not connect to this Astra conversation or
@@ -61,9 +72,10 @@ python -B install_zcode.py --apply
 python -B install_zcode.py --check
 ```
 
-Upgrading from the old GLM coordinator? Add `--migrate-legacy` to preview and
-apply. Follow [the complete guide](INSTALL-IN-ZCODE.md) for refreshing skills,
-starting fresh conversations, task/result handoff and undo.
+For updates to installed package files, add `--replace` to preview and apply.
+Upgrading from the old GLM coordinator? Also add `--migrate-legacy` to preview
+and apply. Follow [the complete guide](INSTALL-IN-ZCODE.md) for refreshing skills,
+starting a goal, runtime requirements and undo.
 
 ## Historical upstream DeepSeek benchmark
 

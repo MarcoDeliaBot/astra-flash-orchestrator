@@ -1,7 +1,7 @@
 # Advanced: native Astra + GLM workers inside Codex
 
 If your worker runs in the **ZCode app**, use [INSTALL-IN-ZCODE.md](INSTALL-IN-ZCODE.md)
-instead: Astra stays in Codex and GLM executes the file-based handoff in ZCode.
+instead: Astra stays in Codex and dispatches GLM through ZCode's bundled runtime.
 The guide below is a different integration: a native Codex worker through an
 already-configured Router. It does not control ZCode or reuse its login.
 

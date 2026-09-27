@@ -25,6 +25,7 @@ class ZCodeTests(unittest.TestCase):
         self.config = self.root / '.zcode'
         self.config.mkdir()
         self.orchestrator = self.root / '.codex' / 'skills' / zcode.ORCHESTRATOR / 'SKILL.md'
+        self.helper = self.orchestrator.parent / 'scripts' / 'zcode_worker.py'
         self.skill = self.config / 'skills' / zcode.WORKER / 'SKILL.md'
         self.settings = self.config / 'v2' / 'config.json'
         self.settings.parent.mkdir()
@@ -70,7 +71,7 @@ class ZCodeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(before, self.snapshot())
         self.assertNotIn('TEST_SECRET', result.stdout + result.stderr)
-        self.assertIn('Manual file handoff', result.stdout)
+        self.assertNotIn('Manual file handoff', result.stdout)
 
     def test_install_separates_host_roles_and_preserves_settings(self):
         before = self.snapshot()
@@ -83,6 +84,9 @@ class ZCodeTests(unittest.TestCase):
                          (ROOT / 'handoff/skills/astra-glm-orchestrator/SKILL.md').read_bytes().replace(b'\r\n', b'\n'))
         self.assertEqual(self.skill.read_bytes(),
                          (ROOT / 'zcode/skills/glm-worker/SKILL.md').read_bytes().replace(b'\r\n', b'\n'))
+        self.assertEqual(self.helper.read_bytes(),
+                         (ROOT / 'handoff/skills/astra-glm-orchestrator/scripts/zcode_worker.py').read_bytes().replace(b'\r\n', b'\n'))
+        self.assertFalse((self.config / 'skills' / 'zcode_worker.py').exists())
         self.assertFalse((self.config / 'agents').exists())
         self.assertFalse((self.config / 'skills' / zcode.ORCHESTRATOR).exists())
         self.assertNotIn('TEST_SECRET', result.stdout + result.stderr)
@@ -94,6 +98,11 @@ class ZCodeTests(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
         self.apply()
         self.skill.write_text(self.skill.read_text() + '\nPersonal instructions\n')
+        before = self.snapshot()
+        self.assertEqual(self.cli('--check').returncode, 2)
+        self.assertEqual(before, self.snapshot())
+        install.apply_changes(zcode.plan_changes(self.root, self.config, replace=True), self.config, {})
+        self.helper.write_text(self.helper.read_text() + '\n# Personal helper edit\n')
         before = self.snapshot()
         self.assertEqual(self.cli('--check').returncode, 2)
         self.assertEqual(before, self.snapshot())
@@ -118,10 +127,26 @@ class ZCodeTests(unittest.TestCase):
         self.assertEqual('Personal agent instructions', self.orchestrator.read_text())
         self.assertFalse(self.skill.exists())
 
+    def test_replace_backs_up_preexisting_helper_and_undo_restores_it(self):
+        self.helper.parent.mkdir(parents=True)
+        self.helper.write_text('# Personal helper script\n')
+        before = self.snapshot()
+        self.assertEqual(self.cli('--apply').returncode, 2)
+        self.assertEqual(before, self.snapshot())
+        receipt = install.apply_changes(zcode.plan_changes(self.root, self.config, replace=True), self.config, {})
+        self.assertNotEqual(self.helper.read_text(), '# Personal helper script\n')
+        result = self.cli('--undo', str(receipt), '--apply')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.helper.read_text(), '# Personal helper script\n')
+        self.assertFalse(self.orchestrator.exists())
+        self.assertFalse(self.skill.exists())
+
     def test_undo_preview_and_apply_preserve_unrelated_files(self):
         receipt = self.apply()
         unrelated = self.skill.parent / 'notes.md'
         unrelated.write_text('Personal notes')
+        unrelated_helper = self.helper.parent / 'other_tool.py'
+        unrelated_helper.write_text('#!/usr/bin/env python3\nprint("unrelated")\n')
         before = self.snapshot()
         self.assertEqual(self.cli('--undo', str(receipt)).returncode, 0)
         self.assertEqual(before, self.snapshot())
@@ -129,7 +154,9 @@ class ZCodeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(self.skill.exists())
         self.assertFalse(self.orchestrator.exists())
+        self.assertFalse(self.helper.exists())
         self.assertEqual('Personal notes', unrelated.read_text())
+        self.assertEqual('#!/usr/bin/env python3\nprint("unrelated")\n', unrelated_helper.read_text())
         self.assertEqual(before['.zcode/v2/config.json'], self.settings.read_bytes())
 
     def test_undo_rejects_out_of_scope_target_without_partial_restore(self):
@@ -161,6 +188,23 @@ class ZCodeTests(unittest.TestCase):
         with patch.object(install, 'atomic_write', side_effect=failing_write), self.assertRaises(OSError):
             install.apply_changes(changes, self.config, {})
         self.assertFalse(self.orchestrator.exists())
+        self.assertFalse(self.skill.exists())
+        receipt, = (self.config / 'astra-flash-install-backups').glob('*/receipt.json')
+        self.assertEqual(json.loads(receipt.read_text())['status'], 'rolled-back')
+
+    def test_partial_helper_write_failure_rolls_back(self):
+        changes = zcode.plan_changes(self.root, self.config)
+        original_write = install.atomic_write
+
+        def failing_write(path, data, mode=0o600):
+            if path == self.helper:
+                raise OSError('synthetic helper write failure')
+            return original_write(path, data, mode)
+
+        with patch.object(install, 'atomic_write', side_effect=failing_write), self.assertRaises(OSError):
+            install.apply_changes(changes, self.config, {})
+        self.assertFalse(self.orchestrator.exists())
+        self.assertFalse(self.helper.exists())
         self.assertFalse(self.skill.exists())
         receipt, = (self.config / 'astra-flash-install-backups').glob('*/receipt.json')
         self.assertEqual(json.loads(receipt.read_text())['status'], 'rolled-back')
@@ -274,14 +318,16 @@ class ZCodeTests(unittest.TestCase):
     def test_shared_coordinator_migrates_to_codex_only_and_undo_restores_it(self):
         shared = self.root / '.agents' / 'skills' / zcode.ORCHESTRATOR / 'SKILL.md'
         shared.parent.mkdir(parents=True)
-        original = (ROOT / 'handoff/skills/astra-glm-orchestrator/SKILL.md').read_bytes().replace(b'\r\n', b'\n')
+        original = (ROOT / 'tests/fixtures/shared-coordinator-v1.3.0.md').read_bytes().replace(b'\r\n', b'\n')
+        self.assertEqual(install.digest(original), zcode.SHARED_COORDINATOR_HASH)
+        current = (ROOT / 'handoff/skills/astra-glm-orchestrator/SKILL.md').read_bytes().replace(b'\r\n', b'\n')
         shared.write_bytes(original)
         before = self.snapshot()
         self.assertEqual(self.cli('--apply').returncode, 2)
         self.assertEqual(before, self.snapshot())
         result = self.cli('--migrate-legacy', '--apply')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.orchestrator.read_bytes(), original)
+        self.assertEqual(self.orchestrator.read_bytes(), current)
         self.assertFalse(shared.exists())
         self.assertEqual(self.cli('--check').returncode, 0)
         receipt, = (self.config / 'astra-flash-install-backups').glob('*/receipt.json')
@@ -303,7 +349,9 @@ class ZCodeTests(unittest.TestCase):
             changes = zcode.plan_changes(self.root, self.config)
         paths = {c['path'] for c in changes}
         self.assertIn(custom / 'skills' / zcode.ORCHESTRATOR / 'SKILL.md', paths)
+        self.assertIn(custom / 'skills' / zcode.ORCHESTRATOR / 'scripts' / 'zcode_worker.py', paths)
         self.assertNotIn(self.orchestrator, paths)
+        self.assertNotIn(self.helper, paths)
 
 
 if __name__ == '__main__':

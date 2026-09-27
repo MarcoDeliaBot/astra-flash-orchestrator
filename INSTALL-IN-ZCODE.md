@@ -1,32 +1,43 @@
-# Astra in Codex orchestrates; GLM-5.3-Flash in ZCode implements
+# Astra directs GLM automatically
 
-The roles are fixed:
+Give the objective to Astra in Codex. Astra prepares the assignment, starts
+GLM-5.3-Flash through the ZCode runtime, waits for the result, reviews the patch
+and tests, and sends corrections itself. No prompt copying between applications
+is required in automatic mode.
 
-| Application | Model | Responsibility | Skill |
-| --- | --- | --- | --- |
-| Codex | Astra | Plan, assign, review and accept | `astra-glm-orchestrator` |
-| ZCode Agent | GLM-5.3-Flash | Implement, test, debug and report | `glm-worker` |
+| Component | Responsibility |
+| --- | --- |
+| Astra in Codex | Plan, assign, review, request corrections, accept and integrate |
+| GLM-5.3-Flash in ZCode's bundled runtime | Implement, test, debug and report |
+| Local Python bridge | Start the worker, check routing, collect evidence and stop it |
 
-GLM does not orchestrate, create a second worker, or accept its own work.
-You select the model in each app. Skill files do not switch models or prove
-model identity. No API credentials are needed by this file-based adapter; each
-app uses its existing account connection.
+The bridge contains no second orchestrator model. Astra is this Codex
+conversation; it can send multiple bounded assignments until the objective is
+complete. After an implementation needs changes, Astra normally gives GLM up to
+three corrective attempts with specific evidence and examples. Two can suffice
+when the task warrants it. Only after those attempts fail does Astra take over
+the remaining code. A missing runtime or expired access is an infrastructure
+blocker, not a completed correction attempt.
 
-**The handoff is manual.** Astra writes an assignment in the shared project;
-you send the prepared instruction in ZCode. GLM writes its result; you tell Astra
-to review it. Installing skills does not create an automatic connection between
-the apps. For native automatic delegation inside Codex, use the separate
-[Router integration](INSTALL-IN-CODEX.md) with an already-configured GLM route.
-That integration is not ZCode control and does not reuse a ZCode login implicitly.
+## Requirements
 
-## Install
+- Codex with Astra selected and Python 3.11+.
+- ZCode installed with its bundled CLI **0.16.9**, plus Node.js on PATH.
+- An existing Z.ai Coding Plan connection in the supported local ZCode desktop
+  configuration. The initial adapter supports the existing
+  `builtin:zai-coding-plan` entry in `~/.zcode/v2/config.json` and its
+  `GLM-5.3-Flash` catalog entry. It does not decrypt credential stores, log in,
+  create API keys, change providers, or silently use a different model.
+- A project checkout available locally to both processes.
 
-Requirements: Codex with Astra selected, ZCode Agent with GLM-5.3-Flash selected,
-the same project checkout accessible in both apps, and Python 3.11+ for setup.
-This adapter uses ordinary skills; it does not require ZCode custom subagents.
-See the official [ZCode skills documentation](https://zcode.z.ai/en/docs/skill).
+The transport uses ZCode's bundled `app-server` protocol. That protocol is
+version-sensitive; the adapter deliberately rejects unverified CLI versions.
+Windows is the platform used for the real execution check. Cross-platform unit
+tests do not establish live macOS/Linux support.
 
-From the complete repository folder, run:
+## Installation and updates
+
+From the full repository, preview installation before applying:
 
 ```sh
 python -B install_zcode.py
@@ -34,101 +45,115 @@ python -B install_zcode.py --apply
 python -B install_zcode.py --check
 ```
 
-The first command previews; the second writes these two definitions plus an
-undo receipt under `~/.zcode/astra-flash-install-backups/`:
+When upgrading different existing package files, add `--replace` to preview and
+apply. The installer backs up every replaced file and prints an undo receipt.
+It installs the Astra skill and bridge under `~/.codex/skills/` (or
+`CODEX_HOME/skills`) and the worker skill under `~/.zcode/skills/`. It preserves
+model settings, credentials, AGENTS.md and unrelated skills. Installation and
+the offline file check make no model requests.
 
-- `~/.codex/skills/astra-glm-orchestrator/SKILL.md` for Codex (or under
-  `CODEX_HOME/skills` when configured). This avoids ZCode's shared skill discovery.
-- `~/.zcode/skills/glm-worker/SKILL.md` for ZCode.
+Use `--home`, `--zcode-home` and `CODEX_HOME` consistently when customizing
+installation paths. The runtime's `--zcode-home` is a separate invocation option
+when the worker uses a nonstandard ZCode configuration directory.
 
-Existing files with different contents require an explicit `--replace` after
-review and are backed up. Repeating the same installation is a no-op. Settings,
-credentials, AGENTS.md and unrelated skills/agents are preserved. Use `--home`
-for the default user home and legacy lookup, `CODEX_HOME` for a custom Codex
-directory, and `--zcode-home` for ZCode's configuration directory. Keep these
-locations consistent for check and undo.
-The check verifies file contents and absence of obsolete coordinator definitions,
-not app discovery, model selection or successful inference. Setup makes no model
-requests and does not submit a task in either app.
+In a new Codex chat, invoke the installed skill with the objective. In an existing
+chat, ask Astra to reread the updated astra-glm-orchestrator/SKILL.md and continue
+from the current project state. If the client keeps old instructions cached, open
+a fresh chat against the same checkout and recover the continuity checkpoint. ZCode's
+desktop chat does not need to remain open: the bridge starts the installed
+runtime itself.
 
-## Upgrade from the former GLM coordinator
+## Give Astra a goal
 
-Version 1.3.0-glm.2 installed `glm-orchestrator` and
-`glm-orchestrator-builder`, incorrectly making GLM the coordinator. That design
-is withdrawn. Upgrade with:
-
-```sh
-python -B install_zcode.py --migrate-legacy
-python -B install_zcode.py --migrate-legacy --apply
-python -B install_zcode.py --check
-```
-
-Migration creates the two correct skills and backs up/removes only the old
-`~/.zcode/skills/glm-orchestrator/SKILL.md` and
-`~/.zcode/agents/glm-orchestrator-builder.md`. Known file hashes are required;
-customized old definitions stop the entire change for manual reconciliation.
-Other files in those directories are preserved. `--replace` does not override
-the protection for customized obsolete definitions.
-
-The same migration also moves the known 1.3.0-glm.3 Astra skill out of the shared
-`~/.agents/skills/astra-glm-orchestrator/SKILL.md` location into Codex's own skill
-directory. This prevents its automatic discovery in ZCode. A customized shared
-copy is preserved and requires manual reconciliation.
-
-## Start using it
-
-1. In ZCode **Settings -> Skills**, click **Refresh** and enable `glm-worker`.
-   After an upgrade, refresh **Subagents** too: the old builder should disappear.
-2. Open fresh conversations in both apps against the agreed project checkout;
-   old conversations can retain old instructions. Keep **Astra in Codex** and
-   **GLM-5.3-Flash in ZCode**. If Codex does not discover its new skill, reopen it.
-3. In **Codex**, select `$astra-glm-orchestrator` and describe your objective.
-   Astra prepares the plan and a bounded `TASK.md` plus a ZCode instruction.
-4. In **ZCode**, send that instruction using `$glm-worker` and the exact task path.
-   GLM implements the assignment and writes `RESULT.md` for Astra.
-5. Tell **Astra in Codex** that the report is ready. Astra reviews the actual
-   changes and checks, then writes `REVIEW.md` with acceptance or corrections.
-
-Example in Codex:
+In Codex:
 
 ```text
 $astra-glm-orchestrator
 
-Obiettivo: [descrivi la funzionalita].
-Tu Astra sei l'orchestratore. Prepara il piano e l'incarico per
-GLM-5.3-Flash in ZCode; dammi il messaggio da inviare all'operaio.
-Conserva tu la revisione e l'accettazione finale.
+Obiettivo: [descrivi il risultato desiderato].
+Tu Astra pianifichi e verifichi. Delega automaticamente l'implementazione
+a GLM-5.3-Flash, controlla il risultato e invia tu i correttivi con esempi.
+Fagli fare 2-3 tentativi di correzione prima di intervenire sul codice.
+Continua fino al completamento verificato dell'obiettivo.
 ```
 
-Example in ZCode, after Astra has created the real file:
+Astra reads the current project state and creates a versioned `TASK.md`, then
+uses the helper below. These commands are for Astra or troubleshooting; the
+user does not have to run them for every assignment.
 
-```text
-$glm-worker
-
-Esegui l'incarico di Astra in "[percorso assoluto del TASK.md]".
-Usa GLM-5.3-Flash. Scrivi la consegna nel RESULT.md indicato.
-Non orchestrare e non approvare il tuo lavoro: la revisione spetta ad Astra.
+```sh
+python /absolute/path/to/astra-glm-orchestrator/scripts/zcode_worker.py doctor
+python /absolute/path/to/astra-glm-orchestrator/scripts/zcode_worker.py run \
+  --workspace /absolute/project \
+  --task /absolute/project/.ai/agent-work/task-01/TASK.md \
+  --run-dir /absolute/project/.ai/agent-work/task-01/attempt-01 \
+  --timeout 900
 ```
 
-Use one writer in the shared checkout: Astra does not edit GLM's assigned paths
-while execution is active. A result report must match task ID, revision and
-baseline. Neither a file labeled "Astra" nor a worker's self-report proves
-authorization, model identity or correct execution. Actual acceptance rests on
-the brief, patch and verification evidence. Runtime execution, quality and cost
-savings are not established by the offline test suite.
+The task brief states goal, exact checkout and baseline, existing dirty work,
+allowed paths, contracts, checks, report path and stop conditions. A new attempt
+directory preserves each execution's evidence. The bridge's completion status
+means the worker returned for review. Astra accepts only after inspecting the
+real changes and relevant checks, records `REVIEW.md`, and sends the next
+revision automatically if necessary.
+
+## Permission review by Astra
+
+When the helper prints `HIGH_PERMISSION_REQUEST`, Astra reads the complete
+`pending-permission.json` from that attempt directory, checks the exact tool
+input against the authorized assignment, and writes `approval.json` there.
+The approval copies `stable_hash`, `request_id`, `tool_call_id`, `input_hash`,
+`session_id` and `turn_id` from that exact request and adds
+`"decision": "allow"` or `"decision": "deny"`. Write to a temporary file and
+rename it to `approval.json` so the helper cannot read a partial write.
+
+The helper consumes a matching approval once and reuses it only for identical
+retransmissions of that operation. Changed tool, risk or input is refused.
+Oversized input, input that cannot be displayed completely, critical/unknown
+requests and unsupported interactions block the run. An expired request is
+never approval. The user does not need to operate this file protocol.
+
+## Execution limits and evidence
+
+One worker writes in a checkout at a time. Astra waits without editing the
+assigned files. The bridge verifies the configured session model, bounds each
+turn by a timeout, and handles process cleanup before releasing its lock.
+Task scope is an instruction, not an operating-system sandbox. Existing tool
+permissions still apply; high-risk or unsupported interactions return to Astra
+for assessment rather than inventing a user answer.
+
+The existing account credential is supplied in memory to the matching ZCode
+runtime authentication request. It is not placed in command-line arguments,
+reports or public source. Do not publish raw provider logs, private task briefs,
+installation backups or worker artifacts. `.ai/` is ignored in this repository.
+
+This runs while Astra's Codex session is active. It installs no recurring job or
+always-on service, and cannot promise continued work after Codex stops or account
+limits are reached. A project checkpoint lets a later session recover progress.
+Delegating implementation does not grant new permission to publish, deploy or
+change production systems.
+
+## Manual fallback and legacy migration
+
+Manual handoff remains available when explicitly requested or when runtime
+prerequisites cannot be met. Astra writes the brief; the user sends
+`$glm-worker` with its absolute path in ZCode and returns the result to Astra.
+Do not claim automatic execution in that case.
+
+Version 1.3.0-glm.2's `glm-orchestrator` and `glm-orchestrator-builder` made GLM
+the coordinator and are withdrawn. `--migrate-legacy` backs up and removes only
+known versions of those definitions, and the known shared Astra definition
+previously installed under `~/.agents/skills/`. Customized legacy files are
+preserved and reported. `--replace` does not override that protection.
 
 ## Undo
-
-Use the receipt path printed by the installer:
 
 ```sh
 python -B install_zcode.py --undo PATH_TO_RECEIPT
 python -B install_zcode.py --undo PATH_TO_RECEIPT --apply
 ```
 
-Undo is restricted to the two new skill paths, the two legacy GLM definitions,
-and the former shared Astra skill path. Undoing a migration restores retired
-files and removes
-newly created skills; use it only when that rollback is intended. Later user edits
-or recreated legacy files block undo before restoration. Empty directories may
-remain. No unrelated files or model/account settings are changed.
+Undo previews first, is limited to package-owned paths, and refuses to overwrite
+later edits. Undoing a legacy migration restores retired definitions, so use it
+only when that rollback is intended. Credentials and model settings are not
+part of installation or undo.

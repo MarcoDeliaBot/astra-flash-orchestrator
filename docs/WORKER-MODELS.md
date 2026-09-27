@@ -1,8 +1,8 @@
 # Choose the implementation model
 
 For **Astra in Codex + GLM-5.3-Flash in the ZCode app**, use the
-[two-app handoff guide](../INSTALL-IN-ZCODE.md). The roles stay fixed and the
-handoff is manual. The routes below apply only to the separate native Codex
+[automatic ZCode guide](../INSTALL-IN-ZCODE.md). Astra dispatches and reviews;
+the worker model is pinned to GLM-5.3-Flash. The routes below apply only to the separate native Codex
 Router integration; a ZCode login does not configure those routes.
 
 This fork keeps Astra responsible for architecture, task boundaries and final
@@ -96,8 +96,10 @@ catalogs, unchanged user configuration, and catalog changes during installation.
 CI runs these checks on Linux and Windows. Symlink checks are explicitly skipped
 only where creating their fixture is unsupported; normal checks still run.
 
-No paid GLM inference or quality/cost comparison has been performed for this
-fork. The upstream DeepSeek benchmark is historical evidence for a different
-model and workload; it does not establish GLM savings or quality. Compare models
+Live execution of the native Router routes above remains unverified. The
+separate ZCode bridge has its own [execution record](VALIDATION.md). No GLM
+quality/cost comparison has been performed. The upstream DeepSeek benchmark
+is historical evidence for a different model and workload; it does not
+establish GLM savings or quality. Compare models
 on the same tasks with acceptance checks and actual provider usage before making
 performance claims.

@@ -61,3 +61,19 @@ Model identifiers and documented routes checked September 26, 2026:
 These are documentation checks, not live inference verification. Original
 copyright and MIT license are retained; the fork does not claim ownership of
 the upstream project or endorsement by OpenAI, Z.ai, DeepSeek or Codex Router.
+
+## Automatic ZCode transport
+
+Checked September 27, 2026 against the installed ZCode CLI 0.16.9. The bridge is
+original Python code informed by observed local app-server request/response and
+session-event behavior. ZCode's vendor implementation and account configuration
+are not bundled. The adapter is version-gated because this transport is not a
+stable public API promise.
+
+- [ZCode installation](https://zcode.z.ai/en/docs/install)
+- [ZCode skills](https://zcode.z.ai/en/docs/skill)
+- [ZCode commands](https://zcode.z.ai/en/docs/commands)
+
+The documented desktop commands do not themselves establish programmatic
+compatibility. See docs/VALIDATION.md for actual checks of this bridge, separate
+from the historical native Router and DeepSeek benchmark evidence.

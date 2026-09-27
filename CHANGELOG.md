@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.0-glm.1 - Automatic Astra to GLM execution
+
+- Add a Python bridge for the installed ZCode CLI 0.16.9 and an existing Z.ai
+  Coding Plan connection, explicitly selecting GLM-5.3-Flash. Astra in Codex
+  dispatches, reviews, sends guided corrections and accepts the result.
+- Validate session/model/workspace identity and terminal state; use bounded
+  turns, complete per-operation permission review, credential redaction,
+  exclusive workspace locks and owned-process cleanup. Disable automatic
+  answers to user questions in runtime preferences.
+- Install the helper with the two role-specific skills, preserving the existing
+  preview, backup, conflict, migration, rollback and undo protections.
+- Add synthetic protocol/subprocess regressions and document real Windows
+  execution separately from historical offline and DeepSeek evidence.
+- Give GLM two or three guided correction attempts before Astra takes over
+  remaining implementation defects. No manual prompt relay is required.
+
 ## 1.3.0-glm.4 - Keep Astra instructions specific to Codex
 
 - Install the coordinator in Codex's own skills directory, honoring CODEX_HOME,

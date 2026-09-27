@@ -14,7 +14,8 @@ class ReleaseTests(unittest.TestCase):
         names = {p.relative_to(release.ROOT).as_posix() for p in release.selected()}
         self.assertTrue({'install_zcode.py', 'INSTALL-IN-ZCODE.md',
                          'zcode/skills/glm-worker/SKILL.md',
-                         'handoff/skills/astra-glm-orchestrator/SKILL.md'}.issubset(names))
+                         'handoff/skills/astra-glm-orchestrator/SKILL.md',
+                         'handoff/skills/astra-glm-orchestrator/scripts/zcode_worker.py'}.issubset(names))
         self.assertNotIn('zcode/skills/glm-orchestrator/SKILL.md', names)
         self.assertNotIn('zcode/agents/glm-orchestrator-builder.md', names)
 

@@ -48,8 +48,13 @@ def coordinator_file(home: Path) -> Path:
     return Path(os.path.abspath(codex_home)) / "skills" / ORCHESTRATOR / "SKILL.md"
 
 
+def helper_file(home: Path) -> Path:
+    return coordinator_file(home).parent / "scripts" / "zcode_worker.py"
+
+
 def target_files(home: Path, directory: Path) -> set[Path]:
     return {coordinator_file(home),
+            helper_file(home),
             directory / "skills" / WORKER / "SKILL.md"}
 
 
@@ -69,6 +74,8 @@ def plan_changes(home: Path, directory: Path, replace: bool = False,
     requested = {
         coordinator_file(home):
             BUNDLE / "handoff" / "skills" / ORCHESTRATOR / "SKILL.md",
+        helper_file(home):
+            BUNDLE / "handoff" / "skills" / ORCHESTRATOR / "scripts" / "zcode_worker.py",
         directory / "skills" / WORKER / "SKILL.md":
             BUNDLE / "zcode" / "skills" / WORKER / "SKILL.md",
     }
@@ -124,15 +131,16 @@ def main() -> int:
         if args.check:
             if changes:
                 raise SetupError("Handoff adapter is missing or differs from this bundle. Preview installation first.")
-            print("Both skills match this bundle; obsolete GLM and shared coordinator definitions are absent.")
-            print("Dispatch between apps is manual; live execution and selected models remain unverified.")
+            print("Installed skills and helper match this bundle; obsolete GLM and shared coordinator definitions are absent.")
+            print("This check verifies installed file contents only; runtime dispatch and selected models remain unverified.")
             return 0
         print(f"Codex coordinator: {coordinator_file(home)}")
+        print(f"Codex worker helper: {helper_file(home)}")
         print(f"ZCode home: {directory}")
         print(f"Orchestrator: Astra in Codex (${ORCHESTRATOR})")
         print(f"Worker: GLM-5.3-Flash in ZCode (${WORKER})")
-        print("Select each model in its own app. This installer does not switch or authenticate models.")
-        print("Manual file handoff; no automatic cross-app connection or model request is created.")
+        print("Keep Astra selected in Codex; the runtime helper explicitly selects GLM-5.3-Flash. This installer does not switch or authenticate models.")
+        print("Automatic runtime dispatch becomes available when both apps are configured; this installer does not run doctor or inference and creates no configuration or credentials.")
         for change in changes:
             operation = "RETIRE" if change["after"] is None else ("UPDATE" if change["before"] is not None else "CREATE")
             print(f"{operation} {change['path']}")
@@ -142,7 +150,7 @@ def main() -> int:
         receipt = apply_changes(changes, directory, {})
         print(f"Installed. Undo receipt: {receipt}" if receipt else "Already installed; no changes needed.")
         print("Settings, credentials, AGENTS.md and unrelated skills/agents were not changed.")
-        print("Refresh ZCode Skills/Subagents and start fresh sessions. Use the orchestrator in Codex and the worker in ZCode.")
+        print("Start a fresh Codex chat with Astra and invoke $astra-glm-orchestrator. The bridge starts the ZCode worker automatically.")
         return 0
     except (SetupError, OSError, ValueError) as exc:
         message = str(exc) if isinstance(exc, SetupError) else f"Local installation error ({type(exc).__name__}); inspect locally."
