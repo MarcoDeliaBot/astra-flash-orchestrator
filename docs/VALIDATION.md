@@ -1,5 +1,38 @@
 # Validation evidence
 
+## Event-driven desktop wakeup: 1.5.0-glm.1
+
+Checked September 28, 2026 on Windows with Python 3.11.9, Node 24.12.0 and
+the installed official `codex-app-tools` MCP server 0.1.5.
+
+- The full local suite ran **211 tests: 206 passed, five skipped** for Windows
+  symlink privileges. The 22 new notification tests exercise synthetic MCP
+  receipts, exact-thread matching, bounded errors, durable deduplication,
+  permission ordering, startup confirmation/cancellation and helper installation.
+  Consult the published commit's Actions run for Linux/Windows matrix results.
+- The new client's read-only preflight recognized the real installed host tool.
+  An earlier actual self-notification arrived while the owning chat was active.
+- For the final integration check, `start` launched a bounded synthetic ZCode
+  process and returned `running` before completion. Astra saved a checkpoint and
+  ended its turn. After about 45 seconds, the real desktop notification resumed
+  that same idle chat. Astra matched the event, task and workspace, verified the
+  delivered receipt, stopped process and released workspace lock. Only one
+  terminal event was sent. This checks the actual background-to-chat route,
+  without making a model inference request in the wakeup fixture.
+
+GLM implemented the initial runtime changes and tests in bounded assignments.
+After stalled correction attempts, Astra fixed the remaining receipt, ledger,
+startup, cleanup and test-race defects. The offline suite and live desktop probe
+apply to the final code, not just GLM's intermediate delivery.
+
+This proves idle resumption in the tested desktop installation while Codex and
+the computer remain available. It does not establish delivery through shutdown,
+sleep, host failure, or every future app version. Permission-event delivery was
+tested synthetically; real timed approval resumption and token savings have not
+been benchmarked. A host receipt means accepted messaging, not accepted work.
+The real GLM execution evidence below belongs to the earlier bridge release.
+Private task paths, messages, account data and logs are excluded from distribution.
+
 ## Token economy instructions: 1.4.1-glm.1
 
 Checked September 28, 2026. Changes are limited to the two ZCode workflow skills,

@@ -63,6 +63,8 @@ for line in sys.stdin:
   if case in ('early','timeout'):continue
   if case=='denied':
    emit({{'id':'server-perm','method':'interaction/requestPermission','params':{{'sessionId':sid,'turnId':turn,'requestId':'perm_1','toolCallId':'tool_1','toolName':'Bash','riskLevel':'critical','input':{{'command':'synthetic forbidden operation'}}}}}});continue
+  if case=='high_perm':
+   emit({{'id':'server-perm','method':'interaction/requestPermission','params':{{'sessionId':sid,'turnId':turn,'requestId':'perm_h','toolCallId':'tool_h','toolName':'Edit','riskLevel':'high','input':{{'path':'synthetic.txt'}}}}}});continue
   if case in ('wrong_auth','secret_metadata'):
    emit({{'id':'server-auth','method':'interaction/requestProviderRuntimeHeaders','params':{{'sessionId':('{SECRET}' if case=='secret_metadata' else 'sess_other'),'providerId':provider,'modelSelection':{{'providerId':provider,'modelId':model}},'workspace':{{'workspacePath':str(workspace),'workspaceKey':str(workspace)}},'reason':'model-request'}}}});continue
   complete();continue

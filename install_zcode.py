@@ -52,9 +52,14 @@ def helper_file(home: Path) -> Path:
     return coordinator_file(home).parent / "scripts" / "zcode_worker.py"
 
 
+def notify_file(home: Path) -> Path:
+    return coordinator_file(home).parent / "scripts" / "codex_notify.py"
+
+
 def target_files(home: Path, directory: Path) -> set[Path]:
     return {coordinator_file(home),
             helper_file(home),
+            notify_file(home),
             directory / "skills" / WORKER / "SKILL.md"}
 
 
@@ -76,6 +81,8 @@ def plan_changes(home: Path, directory: Path, replace: bool = False,
             BUNDLE / "handoff" / "skills" / ORCHESTRATOR / "SKILL.md",
         helper_file(home):
             BUNDLE / "handoff" / "skills" / ORCHESTRATOR / "scripts" / "zcode_worker.py",
+        notify_file(home):
+            BUNDLE / "handoff" / "skills" / ORCHESTRATOR / "scripts" / "codex_notify.py",
         directory / "skills" / WORKER / "SKILL.md":
             BUNDLE / "zcode" / "skills" / WORKER / "SKILL.md",
     }
@@ -136,6 +143,7 @@ def main() -> int:
             return 0
         print(f"Codex coordinator: {coordinator_file(home)}")
         print(f"Codex worker helper: {helper_file(home)}")
+        print(f"Codex notify helper: {notify_file(home)}")
         print(f"ZCode home: {directory}")
         print(f"Orchestrator: Astra in Codex (${ORCHESTRATOR})")
         print(f"Worker: GLM-5.3-Flash in ZCode (${WORKER})")

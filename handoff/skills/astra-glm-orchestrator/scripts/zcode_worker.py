@@ -7,13 +7,31 @@ Subcommands:
       file presence WITHOUT performing any live model request. Uses exactly
       the same shared runtime/config preflight as `run`.
   run --workspace ABS --task ABS --run-dir ABS [--timeout 900]
-      [--effort low|high|max]
+      [--effort low|high|max] [--notify-codex] [--notify-server PATH]
+      [--verbose] [--launch-token TOKEN]
       Execute exactly one worker turn in a fresh ZCode app-server session and
       write state.json / events.ndjson / result.md under --run-dir. --timeout
       is a TOTAL run deadline covering startup, preflight, RPC waits,
       permission approvals and the turn wait. Only the final child-process
       cleanup runs on a separate bounded grace (roughly 30 seconds), so the
-      total wall clock can exceed --timeout by that grace at most.
+      total wall clock can exceed --timeout by cleanup plus one bounded terminal
+      notification attempt (15 seconds plus client shutdown).
+      --notify-codex opts in to bounded Codex notifications (see
+      codex_notify.py) on meaningful events only: a pending high-risk
+      permission AFTER its file exists, and the terminal status AFTER
+      evidence and cleanup are recorded. An atomic compact status.json is
+      maintained for every run. --launch-token is reserved for `start`.
+  start --workspace ABS --task ABS --run-dir ABS [--timeout 900]
+      [--effort low|high|max] [--launch-wait 20] [--notify-server PATH]
+      Convenience launcher: prefights notification support (no send), then
+      starts exactly ONE hidden background `run --notify-codex` worker and
+      waits bounded for its real status.json handshake before returning a
+      compact launch result. On failure/timeout it stops the process it
+      owns, using cooperative cancellation first. Uncertain cleanup is reported
+      explicitly and must be investigated before another worker starts.
+  status --run-dir ABS
+      Print the compact live status.json of one run directory. A missing
+      artifact leaves liveness unknown; a PID alone is never identity.
 
 Python 3.11 stdlib only. Never commit, push, or modify vendor/config files.
 Worker result status is ready_for_review / blocked / failed - never accepted.
@@ -23,6 +41,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
+import math
 import json
 import os
 import queue
@@ -55,6 +75,18 @@ GIT_SUBPROC_TIMEOUT = 30         # upper bound per git subprocess call
 TASKKILL_TIMEOUT = 15            # bounded cleanup grace
 STOP_WAIT_TIMEOUT = 10           # bounded cleanup grace
 SCHEMA_VERSION = 3
+STATUS_SCHEMA_VERSION = 1
+STATUS_FILE = "status.json"
+LEDGER_FILE = "notifications.json"
+LAUNCHER_LOG = "start.log"
+WORKER_LOG = "worker-output.log"
+KNOWN_STATUS = ("starting", "running", "needs_approval",
+                "ready_for_review", "blocked", "failed")
+NOTIFY_TOOL = "send_message_to_thread"
+NOTIFY_ATTEMPT_SECONDS = 15      # bounded per-notification attempt
+NOTIFY_RESERVED_SECONDS = 30     # turn budget never consumed by a notify
+LAUNCH_WAIT_DEFAULT = 20         # bounded start handshake wait
+LAUNCHER_FILES = {LAUNCHER_LOG, WORKER_LOG}  # tolerated in a prepared (pre-created) run dir
 DENY_TOOLS = [
     "Agent", "Task", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet",
     "EnterPlanMode", "ExitPlanMode", "CronCreate", "CronUpdate", "CronDelete",
@@ -123,6 +155,58 @@ def load_json(path: Path):
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def atomic_write_json(path: Path, payload: dict) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False),
+                   encoding="utf-8")
+    tmp.replace(path)
+
+
+def pid_alive(pid: int | None) -> bool:
+    """Liveness of a recorded PID. Windows os.kill(pid, 0) would TERMINATE
+    the process, so query the exit code via a bounded handle instead."""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+    try:
+        import ctypes
+        ctypes.windll.kernel32.OpenProcess.restype = ctypes.c_void_p
+        ctypes.windll.kernel32.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+        ctypes.windll.kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            if not ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return False
+            return code.value == 259  # STILL_ACTIVE
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+    except Exception:  # noqa: BLE001 - never crash status reporting
+        return False
+
+
+def load_notify_module():
+    """Load codex_notify.py from the SAME directory (works for the installed
+    helper layout). Only imported on the explicit notify path, so a plain
+    `run` never depends on notification support or this module."""
+    path = Path(__file__).resolve().parent / "codex_notify.py"
+    spec = importlib.util.spec_from_file_location("codex_notify", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load notify client from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 # ------------------------------------------------------------ runtime paths
@@ -711,6 +795,14 @@ class Runner:
         self.started_monotonic = time.monotonic()
         self.started_epoch = time.time()
         self.deadline = self.started_monotonic + float(args.timeout)
+        self.notify_codex = bool(getattr(args, "notify_codex", False))
+        self.notify_server = getattr(args, "notify_server", None) or None
+        self.launch_token = getattr(args, "launch_token", None) or None
+        self.notify = None                  # codex_notify module, lazy
+        self.run_id = "n/a"
+        self.status_now: str | None = None  # last status.json write
+        self.notification = "none"          # last notification outcome
+        self.ledger: dict | None = None
         self.git_before: dict = {}
         self.git_after: dict = {}
         self.cleanup_status = "not-started"
@@ -722,9 +814,197 @@ class Runner:
     def remaining(self) -> float:
         return self.deadline - time.monotonic()
 
+    def check_launch_cancel(self) -> None:
+        if not self.launch_token or self.run_dir is None or self._cleanup_started:
+            return
+        path = self.run_dir / "launch-cancel.json"
+        if path.is_file():
+            request = load_json(path)
+            if isinstance(request, dict) and request.get("launch_token") == self.launch_token:
+                raise RuntimeError("launcher cancelled startup")
+
     def check_deadline(self, what: str) -> None:
+        self.check_launch_cancel()
         if self.remaining() <= 0:
             raise TimeoutError(f"total run deadline exceeded during {what}")
+
+    # -- compact live status artifact
+
+    def write_status(self, status: str) -> None:
+        """Atomic compact live artifact with a FIXED field set (run/task
+        hash, workspace, status, timestamp, bridge pid, cleanup, notification
+        outcome). No transcript, tool input or secret ever enters it; it
+        doubles as the `start` handshake artifact. A failed write is reported
+        and never fatal - state.json stays the detailed evidence."""
+        if self.run_dir is None:
+            return
+        if status not in KNOWN_STATUS:
+            print(f"refusing unknown live status {status!r}", flush=True)
+            return
+        self.status_now = status
+        try:
+            atomic_write_json(self.run_dir / STATUS_FILE, {
+                "schema_version": STATUS_SCHEMA_VERSION,
+                "run_id": self.run_id,
+                "task_sha256": self.task_sha,
+                "workspace": str(self.workspace),
+                "status": status,
+                "timestamp": time.time(),
+                "bridge_pid": os.getpid(),
+                "cleanup": self.cleanup_status,
+                "notification": self.notification,
+                "launch_token": self.launch_token,
+            })
+        except Exception as exc:  # noqa: BLE001
+            print(redact_text(f"status write failed: {exc}", self.secrets),
+                  flush=True)
+
+    # -- bounded Codex notifications (opt-in; never on ordinary progress)
+
+    def notify_preflight(self) -> None:
+        """Read-only verification BEFORE any paid GLM work: bundled server
+        launches, initialize + tools/list succeed, the one needed tool
+        exists. No message is sent and the catalog is never dumped."""
+        self.check_deadline("notification preflight")
+        if self.notify is None:
+            self.notify = load_notify_module()
+        _thread_id, _pipe = self.notify.read_host_env()
+        server = Path(self.notify_server) if self.notify_server \
+            else self.notify.find_server(self.notify.codex_home(None))
+        client = self.notify.NotifyClient(
+            server, node=getattr(self.args, "notify_node", None) or self.args.node or "node",
+            timeout=min(20.0, max(3.0, self.remaining())))
+        try:
+            client.start()
+            client.initialize()
+            client.verify_tool()
+        finally:
+            client.close()
+
+    def notify_budget(self, grace: bool) -> float:
+        """Transport overhead counts against the run deadline but never
+        consumes the whole turn budget; the terminal notification shares the
+        existing bounded post-deadline cleanup grace."""
+        if grace:
+            return float(NOTIFY_ATTEMPT_SECONDS)
+        reserve = min(float(NOTIFY_RESERVED_SECONDS),
+                      float(self.args.timeout) * 0.25)
+        return min(float(NOTIFY_ATTEMPT_SECONDS),
+                   max(1.0, self.remaining() - reserve))
+
+    def load_ledger(self) -> dict:
+        if self.ledger is None:
+            data = {"schema_version": 1, "entries": []}
+            if self.run_dir is not None:
+                path = self.run_dir / LEDGER_FILE
+                if path.is_file():
+                    try:
+                        loaded = load_json(path)
+                        if isinstance(loaded, dict) \
+                                and isinstance(loaded.get("entries"), list):
+                            data = loaded
+                        else:
+                            raise ValueError("invalid notification ledger")
+                    except (OSError, ValueError) as exc:
+                        raise RuntimeError("cannot read notification ledger; refusing resend") from exc
+            self.ledger = data
+        return self.ledger
+
+    def save_ledger(self) -> None:
+        if self.ledger is None or self.run_dir is None:
+            return
+        atomic_write_json(self.run_dir / LEDGER_FILE, self.ledger)
+
+    def notify_event(self, event_type: str, identity: dict, evidence: str,
+                     grace: bool = False) -> None:
+        """ONE bounded notification for ONE meaningful event. The per-run
+        ledger is persisted BEFORE and AFTER the attempt so a retry/restart
+        can never blindly resend: delivered, pending or uncertain entries are
+        skipped. Failures stay visible locally and never fail the run. The
+        host API has no demonstrated idempotency key, so exactly-once
+        delivery is never claimed."""
+        if self.notify is None or self.run_dir is None:
+            return
+        event_id = sha256_text(json.dumps(
+            {"run": self.run_id, "type": event_type, **identity},
+            sort_keys=True, ensure_ascii=False))[:16]
+        try:
+            ledger = self.load_ledger()
+        except RuntimeError as exc:
+            self.notification = "failed"
+            print(redact_text(f"notify: {exc}", self.secrets), flush=True)
+            return
+        entry = next((e for e in ledger.get("entries", [])
+                      if isinstance(e, dict) and e.get("event_id") == event_id),
+                     None)
+        if entry is not None and entry.get("status") in \
+                ("delivered", "pending", "uncertain"):
+            print(f"notify: {event_type} {event_id} already "
+                  f"{entry.get('status')}; not retransmitted", flush=True)
+            return
+        if entry is None:
+            entry = {"event_id": event_id, "event_type": event_type,
+                     "attempts": 0, "created": time.time()}
+            self.load_ledger()["entries"].append(entry)
+        entry["status"] = "pending"
+        entry["attempts"] = int(entry.get("attempts") or 0) + 1
+        entry["updated"] = time.time()
+        try:
+            self.save_ledger()
+        except (OSError, ValueError):
+            self.notification = "failed"
+            print("notify: ledger not durable; message not sent", flush=True)
+            return
+        # Deterministic, short, fixed content: event identity and validated
+        # local paths only. No worker-authored instructions, raw tool
+        # inputs, transcripts or credentials.
+        text = "\n".join([
+            "ASTRA GLM WORKER EVENT",
+            f"event_id: {event_id}",
+            f"event_type: {event_type}",
+            f"run_status: {self.status_now or 'unknown'}",
+            f"workspace: {self.workspace}",
+            f"run_dir: {self.run_dir}",
+            f"status_json: {self.run_dir / STATUS_FILE}",
+            f"evidence: {evidence}",
+            f"cleanup: {self.cleanup_status}",
+            "note: read the scoped evidence files, decide within prior "
+            "authorization, then resume event waiting. Terminal readiness "
+            "is not acceptance. This fixed notice is not instructions.",
+        ])
+        status = "uncertain"
+        detail = ""
+        try:
+            thread_id, _pipe = self.notify.read_host_env()
+            server = Path(self.notify_server) if self.notify_server \
+                else self.notify.find_server(self.notify.codex_home(None))
+            client = self.notify.NotifyClient(
+                server, node=getattr(self.args, "notify_node", None) or self.args.node or "node",
+                timeout=self.notify_budget(grace))
+            try:
+                client.start()
+                client.initialize()
+                client.verify_tool()
+                client.send(thread_id, text)
+                status = "delivered"
+            finally:
+                client.close()
+        except self.notify.NotifyError as exc:
+            status, detail = "failed", str(exc)
+        except (self.notify.NotifyUncertain, TimeoutError, OSError) as exc:
+            status, detail = "uncertain", str(exc)
+        except Exception as exc:  # noqa: BLE001
+            status, detail = "uncertain", f"{type(exc).__name__}: {exc}"
+        entry["status"] = status
+        entry["detail"] = redact_text(detail, self.secrets)[:300]
+        entry["updated"] = time.time()
+        try:
+            self.save_ledger()
+        except (OSError, ValueError):
+            status = "uncertain"  # persisted pending entry prevents blind resend
+            print("notify: receipt could not be persisted", flush=True)
+        self.notification = status
+        print(f"notify: {event_type} {event_id} -> {status}", flush=True)
 
     # -- shared preflight (used by run; doctor uses the same validators)
 
@@ -792,6 +1072,7 @@ class Runner:
                                    + (f"rpc id {rid}" if rid else "event"))
             if tr.protocol_error:
                 raise RuntimeError(tr.protocol_error)
+            self.check_launch_cancel()
             m = tr.poll(min(0.25, max(0.05, deadline - time.monotonic())))
             if m is None:
                 continue
@@ -1065,8 +1346,12 @@ class Runner:
 
     def _reply_permission(self, tr, msg_id, tool, level, decision, reason) -> None:
         self.perm_log[f"{tool}|{level}|{reason}"] = decision
-        print(redact_text(f"permission {tool} level={level} decision={decision}",
-                          self.secrets), flush=True)
+        ordinary = level in ("low", "medium") and decision == "allow"
+        # Ordinary low/medium grants stay silent by default (audit data is
+        # preserved in state.json); everything else is printed.
+        if not ordinary or bool(getattr(self.args, "verbose", False)):
+            print(redact_text(f"permission {tool} level={level} decision={decision}",
+                              self.secrets), flush=True)
         try:
             tr.reply(msg_id, {"decision": decision, "reason": reason})
         except (OSError, RuntimeError):
@@ -1108,9 +1393,15 @@ class Runner:
                        encoding="utf-8")
         tmp.replace(req_path)
         print("HIGH_PERMISSION_REQUEST " + str(req_path), flush=True)
+        perm_deadline = min(time.monotonic() + PERM_WAIT_SECONDS, self.deadline)
+        self.write_status("needs_approval")
+        if self.notify is not None:
+            # Notify only AFTER the exact pending file exists, once per
+            # distinct request (the ledger dedupes identical events).
+            self.notify_event("permission",
+                              {"stable_hash": key, "input_hash": identity},
+                              str(req_path))
         try:
-            perm_deadline = min(time.monotonic() + PERM_WAIT_SECONDS,
-                                self.deadline)
             while time.monotonic() < perm_deadline:
                 self.check_deadline("high permission approval wait")
                 ap = self.run_dir / "approval.json"
@@ -1147,6 +1438,8 @@ class Runner:
                 req_path.unlink(missing_ok=True)
             except (OSError, TypeError):
                 pass
+            if self.status_now == "needs_approval":
+                self.write_status("running")
 
     # -- turn wait (uses the same pump; early completion is preserved)
 
@@ -1366,6 +1659,9 @@ class Runner:
         self.perm_identities = {}
         self.perm_pending = False
         self._cleanup_started = False
+        self.status_now = None
+        self.notification = "none"
+        self.ledger = None
         self.git_before = self.git_after = {}
         self.cjs = None
         self.builtin_file = None
@@ -1407,22 +1703,50 @@ class Runner:
                 rd = resolve_contained_dir(self.workspace, rd_arg)
             except ValueError as exc:
                 raise RuntimeError(f"invalid run-dir: {exc}") from None
-            try:
-                rd.mkdir(parents=True)
-            except FileExistsError:
-                # An existing run dir (even empty) is refused so previous
-                # evidence is never overwritten.
-                raise RuntimeError(
-                    "run-dir already exists; refusing to reuse or overwrite "
-                    "previous evidence") from None
+            if self.launch_token:
+                # Prepared by `start` for THIS exact launch: an existing
+                # empty directory (plus launcher metadata) is adopted only
+                # with the matching token; arbitrary old run directories are
+                # never allowed.
+                if not rd.is_dir():
+                    raise RuntimeError("prepared run-dir is missing")
+                launch = load_json(rd / LAUNCHER_LOG)
+                if not isinstance(launch, dict) or any(launch.get(k) != v for k, v in {
+                    "launch_token": self.launch_token, "workspace": str(self.workspace),
+                    "task": str(self.task), "run_dir": str(rd),
+                }.items()):
+                    raise RuntimeError("prepared run-dir launch identity mismatch")
+                unexpected = [p.name for p in rd.iterdir()
+                              if p.name not in LAUNCHER_FILES]
+                if unexpected:
+                    raise RuntimeError(
+                        "prepared run-dir is not fresh: "
+                        + ", ".join(unexpected[:5]))
+            else:
+                try:
+                    rd.mkdir(parents=True)
+                except FileExistsError:
+                    # An existing run dir (even empty) is refused so previous
+                    # evidence is never overwritten.
+                    raise RuntimeError(
+                        "run-dir already exists; refusing to reuse or "
+                        "overwrite previous evidence") from None
             self.run_dir = rd
+            self.run_id = sha256_text(json.dumps(
+                [str(self.task), self.task_sha, str(rd), self.started_epoch],
+                sort_keys=True))[:16]
 
             lock = WorkspaceLock(self.workspace, rd)
             lock.acquire()
+            # First live artifact immediately after the lock: this is the
+            # real `start` handshake evidence (one writer, fresh run).
+            self.write_status("starting")
             self.git_before = git_snapshot(
                 self.workspace, budget=max(1.0, self.remaining()))
 
             # ---- ONE shared preflight before any spawn/send
+            if self.notify_codex:
+                self.notify_preflight()
             self.preflight()
             self.check_deadline("pre-spawn")
             tr = self.spawn()
@@ -1476,6 +1800,7 @@ class Runner:
             if ack.get("sessionId") != self.session_id:
                 raise RuntimeError("session/send ack for a different session "
                                    f"{ack.get('sessionId')!r}")
+            self.write_status("running")
             self.wait_turn(tr, float(self.args.timeout))
             self.validate_settled(self.receive(tr, self.send(tr, "session/read", {
                 "sessionId": self.session_id}), 30))
@@ -1536,6 +1861,22 @@ class Runner:
             if self.run_dir is not None:
                 wrote = self.write_outputs(status, detail)
             if lock:
+                # The ZCode tree has stopped (or its lock was preserved).
+                # Release our writer lock before waking the next coordinator turn.
+                lock.release()
+                lock = None
+            if wrote and self.run_dir is not None:
+                # Terminal live status only AFTER evidence and cleanup are
+                # recorded; only then may Astra be woken (once).
+                self.write_status(status)
+                if self.notify is not None:
+                    self.notify_event("terminal", {"status": status},
+                                      "result.md + state.json", grace=True)
+                    self.write_status(status)   # outcome of the notification
+            elif self.run_dir is not None and self.notify is not None:
+                print("notify: terminal notification skipped; detailed "
+                      "evidence could not be written", flush=True)
+            if lock:
                 # Always release: closes the descriptor even when the lock
                 # file itself was preserved (held=False after preserve()).
                 lock.release()
@@ -1545,6 +1886,207 @@ class Runner:
         print(f"run status: {status}")
         print(f"detail: {redact_text(detail, self.secrets)}")
         return 0 if status == "ready_for_review" else 1
+
+
+# ---------------------------------------------------------------- start/status
+
+def read_status_artifact(path: Path) -> dict | None:
+    try:
+        data = load_json(path)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def stop_owned_child(child: subprocess.Popen) -> str:
+    """Bounded tree stop of a process we own and never handed off."""
+    try:
+        if child.poll() is not None:
+            return "uncertain"  # parent exit alone cannot prove descendants stopped
+        if os.name == "nt":
+            kill = subprocess.run(
+                ["taskkill", "/PID", str(child.pid), "/T", "/F"],
+                capture_output=True, timeout=TASKKILL_TIMEOUT)
+            if kill.returncode != 0:
+                return "uncertain"
+        else:
+            try:
+                os.killpg(child.pid, 9)
+            except (ProcessLookupError, PermissionError):
+                child.kill()
+        try:
+            child.wait(timeout=STOP_WAIT_TIMEOUT)
+            return "stopped"
+        except subprocess.TimeoutExpired:
+            return "uncertain"
+    except (OSError, subprocess.TimeoutExpired):
+        return "uncertain"
+
+
+def cmd_start(args) -> int:
+    """Convenience bounded launcher: cheap validation, read-only notification
+    preflight (no send, before ANY paid GLM work), then ONE hidden background
+    worker with --notify-codex. Returns a compact result only after a real
+    handshake: the worker's own status.json carrying our launch token. On any
+    startup failure request normal cleanup first; report uncertainty explicitly."""
+    def emit(payload: dict) -> int:
+        print(json.dumps(payload, ensure_ascii=False))
+        return 0 if payload.get("launched") else 1
+
+    try:
+        if not math.isfinite(args.launch_wait) or not 1 <= args.launch_wait <= 120:
+            raise RuntimeError("--launch-wait must be between 1 and 120 seconds")
+        ws = Path(args.workspace)
+        task = Path(args.task)
+        rd_arg = Path(args.run_dir)
+        if not (ws.is_absolute() and task.is_absolute() and rd_arg.is_absolute()):
+            raise RuntimeError("--workspace/--task/--run-dir must be absolute")
+        ws = ws.resolve(strict=True)
+        if not ws.is_dir():
+            raise RuntimeError("workspace is not a directory")
+        home = Path.home().resolve()
+        if ws in (home, home.parent, Path(ws.anchor)):
+            raise RuntimeError("refusing home/filesystem-root workspace")
+        task = task.resolve(strict=True)
+        if not task.is_file() or not inside(ws, task) \
+                or not no_symlink_escape(ws, task):
+            raise RuntimeError("task must be an existing file inside the "
+                               "workspace, no symlink escapes")
+        rd = resolve_contained_dir(ws, rd_arg)
+        if rd.exists():
+            raise RuntimeError("run-dir already exists; start requires a "
+                               "fresh directory")
+    except (OSError, ValueError, RuntimeError) as exc:
+        return emit({"launched": False, "error": str(exc)})
+
+    try:
+        notify = load_notify_module()
+        notify.read_host_env()
+        server = Path(args.notify_server) if args.notify_server \
+            else notify.find_server(notify.codex_home(None))
+        client = notify.NotifyClient(server, node=args.notify_node or args.node or "node",
+                                     timeout=20.0)
+        try:
+            client.start()
+            client.initialize()
+            client.verify_tool()
+        finally:
+            client.close()
+    except Exception as exc:  # noqa: BLE001
+        return emit({"launched": False,
+                     "error": f"notification preflight failed: {exc}"})
+
+    token = uuid.uuid4().hex
+    try:
+        rd.mkdir(parents=True)
+        (rd / LAUNCHER_LOG).write_text(json.dumps({
+            "launcher_pid": os.getpid(), "launch_token": token,
+            "workspace": str(ws), "task": str(task), "run_dir": str(rd),
+            "started": time.time()}) + "\n", encoding="utf-8")
+    except OSError as exc:
+        return emit({"launched": False, "error": f"cannot prepare run dir: {exc}"})
+
+    worker = Path(__file__).resolve()
+    argv = [sys.executable, "-B", str(worker)]
+    if args.zcode_path:
+        argv += ["--zcode-path", args.zcode_path]
+    if args.node:
+        argv += ["--node", args.node]
+    if args.zcode_home:
+        argv += ["--zcode-home", args.zcode_home]
+    argv += ["run", "--workspace", str(ws), "--task", str(task),
+             "--run-dir", str(rd), "--timeout", str(args.timeout),
+             "--effort", args.effort, "--notify-codex",
+             "--launch-token", token]
+    if args.notify_server:
+        argv += ["--notify-server", args.notify_server]
+    if args.notify_node:
+        argv += ["--notify-node", args.notify_node]
+
+    log_path = rd / WORKER_LOG
+    flags = 0
+    kwargs = {}
+    if os.name == "nt":
+        # Hidden background launch on Windows; explicit argv, no shell.
+        flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+    else:
+        kwargs["start_new_session"] = True
+    try:
+        with open(log_path, "ab") as log:
+            child = subprocess.Popen(argv, stdin=subprocess.DEVNULL,
+                                     stdout=log, stderr=log, shell=False,
+                                     cwd=str(ws), creationflags=flags, **kwargs)
+    except OSError as exc:
+        return emit({"launched": False, "error": f"cannot start worker: {exc}"})
+
+    status_path = rd / STATUS_FILE
+    end = time.monotonic() + max(1.0, float(args.launch_wait))
+    data: dict | None = None
+    while time.monotonic() < end:
+        candidate = read_status_artifact(status_path)
+        if candidate is not None \
+                and candidate.get("launch_token") == token \
+                and candidate.get("bridge_pid") == child.pid \
+                and candidate.get("status") in ("running", "needs_approval", "ready_for_review"):
+            data = candidate
+            break
+        if child.poll() is not None:
+            break
+        time.sleep(0.1)
+
+    if data is None:
+        # Ask the still-owned runner to use its normal ZCode tree cleanup first.
+        # A forced stop is a fallback, not proof of an already-exited parent's tree.
+        if child.poll() is None:
+            atomic_write_json(rd / "launch-cancel.json", {"launch_token": token})
+            try:
+                child.wait(timeout=45)
+            except subprocess.TimeoutExpired:
+                pass
+        if child.poll() is not None:
+            final = read_status_artifact(status_path) or {}
+            proven = (final.get("launch_token") == token and
+                      final.get("bridge_pid") == child.pid and
+                      final.get("status") in ("ready_for_review", "blocked", "failed") and
+                      final.get("cleanup") in ("stopped", "not-started"))
+            stop = "stopped" if proven else "uncertain"
+        else:
+            stop = stop_owned_child(child)
+        reason = ("worker did not report startup in time"
+                  if child.poll() is None else
+                  f"worker exited during startup (code {child.returncode}); "
+                  "see worker log")
+        return emit({"launched": False, "error": reason, "run_dir": str(rd),
+                     "log": str(log_path), "worker_exit": child.returncode,
+                     "stopped": stop})
+    return emit({"launched": True, "run_dir": str(rd), "pid": child.pid,
+                 "status": data.get("status"), "run_id": data.get("run_id"),
+                 "status_path": str(status_path), "log": str(log_path)})
+
+
+def cmd_status(args) -> int:
+    """Print ONLY the compact artifact of one run directory. A missing or
+    invalid artifact leaves liveness unknown; the recorded PID is checked
+    separately and is never treated as durable identity."""
+    rd = Path(args.run_dir)
+    if not rd.is_absolute():
+        print(json.dumps({"error": "--run-dir must be absolute",
+                          "status": "invalid"}))
+        return 2
+    data = read_status_artifact(rd / STATUS_FILE)
+    if data is None or data.get("schema_version") != STATUS_SCHEMA_VERSION \
+            or data.get("status") not in KNOWN_STATUS:
+        print(json.dumps({"run_dir": str(rd), "status": "absent",
+                          "error": f"no valid {STATUS_FILE} artifact; the "
+                                   "run liveness is unknown"}))
+        return 1
+    fields = {"schema_version", "run_id", "task_sha256", "workspace", "status",
+              "timestamp", "bridge_pid", "cleanup", "notification", "launch_token"}
+    data = {k: v for k, v in data.items() if k in fields}
+    data["terminal"] = data["status"] in ("ready_for_review", "blocked", "failed")
+    data["observed_pid_alive"] = pid_alive(data.get("bridge_pid"))
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+    return 0
 
 
 # ---------------------------------------------------------------- cli
@@ -1573,6 +2115,42 @@ def build_parser() -> argparse.ArgumentParser:
                    help="reasoning effort: low|high|max (never medium)")
     r.add_argument("--prompt", default=None,
                    help="override dispatch prompt (testing only)")
+    r.add_argument("--notify-codex", action="store_true",
+                   help="opt-in: bounded Codex notifications for pending "
+                        "high-risk permissions and the terminal outcome")
+    r.add_argument("--notify-node", default=None,
+                   help="Node executable for the desktop notification client")
+    r.add_argument("--notify-server", default=None,
+                   help="explicit codex-app-tools server.mjs path (default: "
+                        "discovery under $CODEX_HOME or ~/.codex)")
+    r.add_argument("--verbose", action="store_true",
+                   help="also print ordinary (low/medium allow) permission "
+                        "decisions to stdout")
+    r.add_argument("--launch-token", default=None,
+                   help=argparse.SUPPRESS)
+
+    s = sub.add_parser("start",
+                       help="preflight notifications and launch ONE hidden "
+                            "background notified worker")
+    s.add_argument("--workspace", required=True, help="absolute workspace path")
+    s.add_argument("--task", required=True, help="absolute task file inside workspace")
+    s.add_argument("--run-dir", required=True,
+                   help="fresh absolute run dir inside workspace")
+    s.add_argument("--timeout", type=int, default=900,
+                   help="TOTAL run deadline in seconds for the worker")
+    s.add_argument("--effort", default="high", choices=list(ALLOWED_EFFORTS),
+                   help="reasoning effort: low|high|max (never medium)")
+    s.add_argument("--notify-node", default=None,
+                   help="Node executable for the desktop notification client")
+    s.add_argument("--notify-server", default=None,
+                   help="explicit codex-app-tools server.mjs path")
+    s.add_argument("--launch-wait", type=float, default=LAUNCH_WAIT_DEFAULT,
+                   help="bounded seconds to wait for the worker handshake")
+
+    st = sub.add_parser("status",
+                        help="print the compact live status.json of a run")
+    st.add_argument("--run-dir", required=True,
+                    help="absolute run directory to inspect")
     return p
 
 
@@ -1582,6 +2160,10 @@ def main(argv=None) -> int:
         return cmd_doctor(args)
     if args.cmd == "run":
         return Runner(args).run()
+    if args.cmd == "start":
+        return cmd_start(args)
+    if args.cmd == "status":
+        return cmd_status(args)
     return 2
 
 

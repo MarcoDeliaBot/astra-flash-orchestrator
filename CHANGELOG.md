@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.5.0-glm.1 - Wake Astra only for actionable events
+
+- Add background `start` with confirmed startup and notifications to the owning
+  Codex desktop chat through the installed official app-tools MCP server.
+- Let Astra finish its turn while GLM works. Notify for a specific approval or
+  terminal outcome; keep ordinary progress quiet and status inspection on demand.
+- Persist compact status and notification receipts, bind launches to their
+  assignment, and release a confirmed stopped worker's lock before final notice.
+  Preserve permission deadlines and report uncertain delivery or cleanup.
+- Install the notification helper through the existing backup/undo workflow.
+  Add synthetic transport, startup, failure and permission-order regressions.
+- Verify real same-chat idle resumption with a bounded synthetic worker and the
+  actual desktop transport. No recurring monitor, new credential or token-savings
+  percentage is introduced; Codex must remain available.
+
 ## 1.4.1-glm.1 - Autonomous worker blocks and lean Astra review
 
 - Require explicit GOAL assignments, GLM self-review, relevant final checks and

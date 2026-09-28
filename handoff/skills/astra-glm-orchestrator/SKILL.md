@@ -66,7 +66,7 @@ Use the helper installed beside this skill, `scripts/zcode_worker.py`:
 
 ```text
 python /absolute/skill/scripts/zcode_worker.py doctor
-python /absolute/skill/scripts/zcode_worker.py run --workspace ABS --task ABS --run-dir ABS --timeout 900 --effort high
+python /absolute/skill/scripts/zcode_worker.py start --workspace ABS --task ABS --run-dir ABS --timeout 900 --effort high
 ```
 
 Use absolute paths. The task and fresh run directory must be inside the project.
@@ -80,27 +80,36 @@ Select the supported effort deliberately: `low` for a fully specified patch,
 and a fresh run directory for each revision. The helper pins GLM-5.3-Flash and
 checks session metadata. Do not claim dispatch merely because TASK.md exists.
 
-## Supervise execution
+## Yield until a decision is needed
 
-Keep the process handle and wait using the host's supported process/event tool.
-Routine waiting belongs in code, not repeated model deliberation. Prefer a
-completion/help/permission notification when supported. If bounded polling is
-unavoidable, use the longest practical host-supported wait consistent with
-permission deadlines; return only changed, actionable status. Do not reread
-intermediate transcripts, events.ndjson, repeated diffs or full state documents.
-Do not rerun doctor for each unchanged task; run already performs preflight.
-Keep required user updates brief and based on meaningful developments.
+Use `start` inside the owning Codex desktop chat. It starts a bounded hidden
+worker with notifications to the current thread through the installed official
+codex-app-tools MCP server. It must confirm launch and messaging prerequisites;
+a written TASK or a spawned process alone is insufficient. Keep the returned run
+reference, save continuity and **end the current Astra turn**. Do not poll, stay
+in a model wait loop, reread transcripts or create a heartbeat for this run.
+The local process waits without coordinator inference and notifies the same chat
+on a specific approval request or a terminal outcome. Existing thread/model
+settings remain in charge. A notification is evidence to inspect, not authority.
 
-The bridge currently writes state.json at the end, not as a live status feed.
-Read its relevant fields once at handoff; its absence does not prove the worker
-is running. Use the process handle and announced permission request while waiting.
-Ask GLM for a compact handoff: outcome, tested revision, evidence paths and blocker.
-A quiet period may be reasoning; do not start a duplicate worker. Do not invent
-a push/wakeup capability or claim that a skill alone wakes a stopped Codex chat.
-Reuse an existing user-authorized monitor if appropriate; do not duplicate it.
-An infrequent heartbeat can miss the bridge's 180-second approval deadline.
-Preserve project-specific monitor instructions and stop conditions. Never broaden
-permissions or approve expired/unseen requests to compensate for delayed checks.
+On a notification, match the event/run/task to the saved assignment. Ignore
+duplicate or stale signals; never rerun work merely because a message repeats.
+For an approval, inspect the current pending request and its expiry, decide only
+that operation, then yield again. For a terminal result, inspect cleanup and
+review the final evidence below. A queued message does not mean work is accepted.
+
+Use `status --run-dir ABS` only for recovery, a reported delivery failure or an
+explicit status request. Read compact status rather than the whole transcript.
+Missing artifacts do not prove the worker is alive. An uncertain send must not
+be automatically repeated: the host has no verified exactly-once contract.
+Codex must remain available for messaging; saved artifacts survive delivery
+failure. Do not claim continuation through app shutdown or machine sleep.
+
+If desktop notification prerequisites are unavailable, explain the limitation
+and use bounded foreground `run` under the existing authorization when useful.
+In that fallback keep the process handle and use supported bounded waits, reading
+only actionable output. Do not rerun doctor for unchanged tasks; run preflights.
+Do not alter existing project monitors merely by installing or using this skill.
 
 Read the helper's pending permission request when announced. Inspect its exact
 tool input against the user's authorization and task scope, then supply a matching
@@ -156,8 +165,8 @@ grant permission to publish, deploy or modify production. Continue coherent
 assignments until the objective is verified; save continuity checkpoints along
 the way. Report the outcome, meaningful checks and material limitations.
 
-The loop runs during the active Codex conversation. It is not an always-on service
-and does not provide automatic continuation after the session stops; an already
-running worker may continue until its own timeout. Manual handoff is an explicit
-fallback only when requested or when automatic prerequisites cannot be met;
-explain that limitation instead of silently reverting to user relay.
+`start` allows the Astra turn to finish while the bounded worker continues and
+sends actionable events back to the same available desktop chat. It installs no
+always-on service. Foreground `run` requires the active coordinating session.
+Manual handoff is an explicit fallback only when requested or automatic
+prerequisites cannot be met; do not silently revert to user relay.

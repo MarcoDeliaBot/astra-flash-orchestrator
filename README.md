@@ -15,7 +15,8 @@ The user does not copy prompts or relay results between apps. GLM pursues each
 GOAL through implementation, self-checks and autonomous repairs. Astra waits for
 an actionable event, reviews the completed block and reuses valid test evidence;
 it intervenes when progress stalls. See [token economy](docs/TOKEN-ECONOMY.md)
-for the rules, current runtime limits and proposed event-driven improvements.
+for evidence reuse and [event-driven operation](docs/EVENT-WAKEUP.md) for waiting
+without periodic coordinator calls.
 
 ```text
 User                  -> objective in Codex
@@ -28,8 +29,11 @@ Codex / Astra         -> accept + integrate + continue toward the objective
 The included Python bridge uses the installed ZCode CLI **0.16.9** and an existing
 supported Z.ai Coding Plan configuration. It selects GLM-5.3-Flash explicitly;
 it does not create another orchestrator or require native GLM subagents in Codex.
-This workflow runs during the active Codex conversation, with bounded worker
-turns. It is not an always-on service.
+With the supported Codex desktop messaging connection, `start` launches a bounded
+worker and lets Astra end its turn. A permission request or completed result
+notifies the same chat; routine progress does not wake Astra. Codex must remain
+available. See [event-driven operation](docs/EVENT-WAKEUP.md) for prerequisites,
+delivery limits and recovery. No persistent service or polling automation is installed.
 
 This is a community fork of [Ethan Rogers' Astra Flash Orchestrator](https://github.com/ethanplusai/astra-flash-orchestrator),
 distributed under the original [MIT license](LICENSE). It preserves the original

@@ -20,13 +20,16 @@ can happen inside one GLM block; they do not require two or three Astra reviews.
 Astra takes over on demonstrated lack of progress, after the worker has stopped.
 A missing runtime or expired access is an infrastructure blocker.
 
-See [token economy](docs/TOKEN-ECONOMY.md) for compact reporting, evidence reuse,
-waiting behavior and the difference between supported events and a proposed
-automatic wakeup integration.
+See [token economy](docs/TOKEN-ECONOMY.md) for compact reporting and evidence reuse,
+and [event-driven operation](docs/EVENT-WAKEUP.md) for background launch,
+same-chat notifications and recovery when the desktop connection is unavailable.
 
 ## Requirements
 
 - Codex with Astra selected and Python 3.11+.
+- For event-driven `start`: the active Codex desktop thread environment and its
+  installed official codex-app-tools MCP server, exposing same-thread messaging.
+  Keep the app available. Foreground `run` remains available without that connection.
 - ZCode installed with its bundled CLI **0.16.9**, plus Node.js on PATH.
 - An existing Z.ai Coding Plan connection in the supported local ZCode desktop
   configuration. The initial adapter supports the existing
@@ -90,7 +93,7 @@ user does not have to run them for every assignment.
 
 ```sh
 python /absolute/path/to/astra-glm-orchestrator/scripts/zcode_worker.py doctor
-python /absolute/path/to/astra-glm-orchestrator/scripts/zcode_worker.py run \
+python /absolute/path/to/astra-glm-orchestrator/scripts/zcode_worker.py start \
   --workspace /absolute/project \
   --task /absolute/project/.ai/agent-work/task-01/TASK.md \
   --run-dir /absolute/project/.ai/agent-work/task-01/attempt-01 \
@@ -102,7 +105,11 @@ allowed paths, contracts, checks, report path and stop conditions. A new attempt
 directory preserves each execution's evidence. The bridge's completion status
 means the worker returned for review. Astra accepts only after inspecting the
 real changes and relevant checks, records `REVIEW.md`, and sends the next
-revision automatically if necessary.
+revision automatically if necessary. After a confirmed `start`, Astra saves the
+run reference and ends its current turn. The local bridge sends actionable events
+to that same thread through the installed app-tools server. Astra resumes for the
+decision, then yields again. Use compact `status --run-dir ABS` only on demand or
+for recovery; normal operation needs no progress polling or heartbeat.
 
 ## Permission review by Astra
 

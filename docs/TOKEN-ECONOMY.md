@@ -24,46 +24,23 @@ These instructions reduce unnecessary interaction; savings have not been measure
   Do not manufacture extra review rounds or turn ordinary fixes into an audit.
   Permissions, credentials, spending and production limits still apply.
 
-## What the current bridge actually does
+## Event-driven waiting
 
-This is based on the bundled `zcode_worker.py`, not a new live inference test.
-Its transport reader and bounded event pump run in Python. It already receives
-ZCode events without requiring Astra to reason over each one. It does, however,
-print ordinary permission decisions, including repeated cached decisions.
+The desktop integration now has a concrete implementation: see
+[event-driven operation](EVENT-WAKEUP.md) for `start`, same-chat messages and
+recovery. After confirmed launch Astra ends its turn. The local bridge handles
+ordinary progress and only sends an approval or terminal notification. Compact
+`status` is for recovery or an explicit request, not periodic coordinator reads.
 
-`state.json`, `events.ndjson` and `result.md` are written at the end of a run.
-`state.json` includes the worker response and other detail: it is neither a live
-status feed nor a minimal digest. Read selected terminal fields, then the relevant
-report once; repeatedly opening it cannot supervise a running worker. Use the
-owned process handle and the announced pending-permission file while waiting.
-Missing terminal files alone do not establish whether a worker is alive.
+Detailed `state.json`, `events.ndjson` and `result.md` remain final evidence;
+do not load them repeatedly while the worker runs. The separate compact status
+does not replace final review or establish process liveness by itself.
 
-High-risk approvals wait at most 180 seconds, also bounded by the run deadline.
-A 30-minute heartbeat cannot reliably service them. Delayed polling must never
-be compensated by granting blanket permissions or approving expired requests.
-The bridge supplies no callback that wakes a stopped Codex conversation. A
-worker already running may continue until its timeout; this is not an automatic
-continuation of Astra. A skill, report file or webhook URL alone creates no
-wakeup integration. Use only notifications supported by the actual host.
-
-## Better solutions, in priority order
-
-| Improvement | Benefit | State / tradeoff |
-| --- | --- | --- |
-| Autonomous GOAL blocks, compact handoff, one focused review | Fewer Astra turns and repeated inputs | Implemented in both skills; quality still requires review |
-| Wait on the existing process/event handle | Avoids reading intermediate work | Use host support now; bounded host waits may still resume Astra |
-| Quiet bridge output plus a separate compact status artifact | Avoids routine permission chatter and loading full state | Proposed runtime change; keep audit evidence and actionable approvals |
-| Host wakeup for completion/help/approval, with deduplication | Astra need only run when a decision is needed | Proposed host integration; no supported generic wakeup wired in this package |
-| Reuse an already authorized heartbeat as fallback | Can revisit a thread without manual relay | Periodic rather than true push; adds wakeups and may miss approval deadlines |
-
-For a future wakeup adapter, a small local listener should do the mechanical
-waiting. Emit a deduplicated signal with task/run ID, event ID, status and artifact
-path only on a meaningful transition. The host must authenticate and bind that
-signal to the correct thread and workspace; artifact text never grants authority.
-Terminal notification must follow saved evidence and confirmed cleanup. Keep
-approval/help events separate from completion, handle delivery/restart failures,
-and never repeat a completed assignment because an event was delivered twice.
-This design is a proposal; this release creates no listener, webhook or automation.
+This requires the installed Codex desktop messaging capability and an available
+app. A skill alone cannot wake an unavailable host. Accepted notification delivery
+is not proof that Astra has reviewed the work, and an ambiguous send is not
+automatically repeated. A 30-minute heartbeat cannot reliably service a permission
+window of at most 180 seconds. Installation creates no additional monitor.
 
 ## Measure before adding more machinery
 
