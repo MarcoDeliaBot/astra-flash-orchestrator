@@ -13,11 +13,16 @@ is required in automatic mode.
 
 The bridge contains no second orchestrator model. Astra is this Codex
 conversation; it can send multiple bounded assignments until the objective is
-complete. After an implementation needs changes, Astra normally gives GLM up to
-three corrective attempts with specific evidence and examples. Two can suffice
-when the task warrants it. Only after those attempts fail does Astra take over
-the remaining code. A missing runtime or expired access is an infrastructure
-blocker, not a completed correction attempt.
+complete. GLM owns self-review, tests, diagnosis and repair attempts inside each
+coherent assignment. Astra reviews the final block, reuses valid evidence and
+sends a grouped correction only when needed. Two or three useful repair attempts
+can happen inside one GLM block; they do not require two or three Astra reviews.
+Astra takes over on demonstrated lack of progress, after the worker has stopped.
+A missing runtime or expired access is an infrastructure blocker.
+
+See [token economy](docs/TOKEN-ECONOMY.md) for compact reporting, evidence reuse,
+waiting behavior and the difference between supported events and a proposed
+automatic wakeup integration.
 
 ## Requirements
 
@@ -71,10 +76,12 @@ In Codex:
 $astra-glm-orchestrator
 
 Obiettivo: [descrivi il risultato desiderato].
-Tu Astra pianifichi e verifichi. Delega automaticamente l'implementazione
-a GLM-5.3-Flash, controlla il risultato e invia tu i correttivi con esempi.
-Fagli fare 2-3 tentativi di correzione prima di intervenire sul codice.
-Continua fino al completamento verificato dell'obiettivo.
+Tu Astra pianifichi e accetti il risultato. Assegna a GLM-5.3-Flash blocchi
+autonomi con GOAL, criteri di completamento, autocontrolli e correzioni autonome.
+Attendi la consegna o una richiesta concreta di aiuto; evita letture intermedie.
+Riusa le prove valide e verifica soltanto le lacune o i rischi concreti.
+Se serve, restituisci un blocco di correttivi con esempi: lascia a GLM i tentativi
+di riparazione prima di intervenire. Continua fino al completamento verificato.
 ```
 
 Astra reads the current project state and creates a versioned `TASK.md`, then

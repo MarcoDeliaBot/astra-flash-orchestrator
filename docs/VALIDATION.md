@@ -1,5 +1,21 @@
 # Validation evidence
 
+## Token economy instructions: 1.4.1-glm.1
+
+Checked September 28, 2026. Changes are limited to the two ZCode workflow skills,
+usage/analysis documentation and release metadata; bridge/installer code is
+unchanged. Both skills pass the official format validator. Focused existing
+suites ran 30 tests: 28 passed, two Windows symlink fixtures skipped (24 installer
+and six release tests). See the commit's CI for the full platform matrix.
+
+The installed coordinator's local GOAL/evidence-reuse rules were incorporated
+into the public skill, and the worker received matching self-check/retry and
+compact-report instructions. Runtime claims in [token economy](TOKEN-ECONOMY.md)
+were checked against the existing bridge source. No new paid inference, token
+benchmark, notification adapter or always-on scheduler was run or implemented.
+The older live execution evidence below is historical, not a live test of this
+policy update. Actual savings and policy adherence remain unmeasured.
+
 ## Automatic ZCode bridge: 1.4.0-glm.1
 
 Checked September 27, 2026 on Windows, Python 3.11.9, Node 24.12.0 and the

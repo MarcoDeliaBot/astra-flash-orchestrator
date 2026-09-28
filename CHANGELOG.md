@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.1-glm.1 - Autonomous worker blocks and lean Astra review
+
+- Require explicit GOAL assignments, GLM self-review, relevant final checks and
+  autonomous diagnosis/repair before handoff; keep reports compact and evidenced.
+- Prefer actionable event/process waits, avoid intermediate transcript reads and
+  repeated doctor checks, and reuse valid final-state test evidence.
+- Group corrective work instead of requiring separate Astra review rounds for
+  every repair attempt. Preserve exact permission and cleanup boundaries.
+- Document current terminal-only artifacts and approval deadlines, distinguish
+  implemented policy from proposed quiet status/wakeup support, and make no
+  unmeasured token-savings claim. No runtime protocol or scheduler changes.
+
 ## 1.4.0-glm.1 - Automatic Astra to GLM execution
 
 - Add a Python bridge for the installed ZCode CLI 0.16.9 and an existing Z.ai

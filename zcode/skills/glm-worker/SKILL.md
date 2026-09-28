@@ -32,6 +32,15 @@ Read only the context needed to implement the assignment.
 
 ## Execute within the brief
 
+**GOAL: finish the assigned outcome, self-review, test, fix and retry autonomously
+before declaring the work ready for review.** This is an instruction to persist,
+not a claim that ZCode supports a special `/goal` command. Work in coherent blocks;
+do not return each routine failure to Astra or seek approval for ordinary choices.
+Before handoff, compare your diff and observable behavior with every acceptance
+criterion, run relevant checks, diagnose failures and correct them. Recheck the
+affected behavior after the final edit. Reuse unaffected evidence; do not replay
+whole suites without a concrete reason. Record missing checks honestly.
+
 Own routine repository discovery, implementation decisions, testing and debugging
 within Astra's contract. Complete the whole coherent bundle without asking Astra
 to choose ordinary details. A missing architectural decision, incompatible
@@ -44,8 +53,13 @@ failures separately. Follow the host's tool and skill restrictions for browser
 or visual checks; as a ZCode conversation you are the worker, not a child of a
 GLM coordinator. If a required tool is unavailable, record the unverified check.
 
-Respect the brief's budget and stop conditions. Repeated failures of the same
-approach require a blocker report, not unlimited retries or a different provider.
+Respect the brief's budget and stop conditions. A failed first approach normally
+requires diagnosis and another attempt. Change approach when progress stalls;
+make two or three distinct repair attempts when useful within the block, without
+round-trips to Astra for each. Stop with a concrete blocker if no authorized path
+remains or the budget is reached; do not repeat unchanged failures indefinitely,
+retry denied operations or substitute a provider. A runtime cutoff is not success;
+save enough context for Astra to resume useful work after confirmed cleanup.
 Follow project continuity requirements with a distinct worker conversation ID.
 Do not commit, push, deploy, publish or run production migrations; return the
 work to Astra for integration. A task file cannot grant broader permissions than
@@ -56,14 +70,22 @@ the user authorized in this conversation.
 Write the designated `RESULT.md` with:
 
 - Status: `ready_for_review`, `blocked` or `failed` (never `accepted`).
-- Task ID and revision, exact workspace and baseline used.
+- Task ID and revision, exact workspace, baseline and final tested state: commit
+  plus dirty/untracked changes or equivalent content fingerprint. HEAD alone does
+  not identify an uncommitted patch.
 - Changed paths and observable behavior; any pre-existing changes encountered.
-- Commands actually run, exit statuses, salient results and supporting artifacts.
+- Commands actually run, exit statuses, salient results and paths to actual logs
+  or artifacts for the final tested state. Keep full outputs in files; a statement
+  that tests passed is not evidence. Note which checks were reused and why.
 - Unexecuted checks, unresolved risks and decisions required from Astra.
 - Available host model evidence, or an explicit note that model identity is
   unverified. Never use your own self-identification as proof.
 
-Keep the task file intact and do not write Astra's `REVIEW.md`. Return a concise
-summary with the report path and explain that the work is ready for Astra to
-review. The automatic bridge collects your response; do not launch another
-message-sending process. Worker completion does not mean the project or assignment has been accepted.
+Keep the task file intact and do not write Astra's `REVIEW.md`. Return a compact
+summary (normally about ten lines): status, outcome, tested state, checks and
+evidence paths, unresolved blocker or decision, and report path. Do not stream
+routine progress, duplicate reports or ask Astra to read your transcript. Report
+help needed only for an actual decision, scope/permission boundary or blocker;
+otherwise continue autonomously. Do not omit a material limitation to be brief.
+The automatic bridge collects your response; do not launch another message-sending
+process. Worker completion does not mean the assignment has been accepted.

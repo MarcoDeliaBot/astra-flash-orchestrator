@@ -11,14 +11,17 @@ installer provides a guarded migration with backups.
 
 **Automatic dispatch:** give Astra an objective. Astra starts GLM through ZCode's
 bundled runtime, receives the result, reviews the patch and sends corrections.
-The user does not copy prompts or relay results between apps. After two or three
-guided correction attempts fail, Astra can take over the remaining implementation.
+The user does not copy prompts or relay results between apps. GLM pursues each
+GOAL through implementation, self-checks and autonomous repairs. Astra waits for
+an actionable event, reviews the completed block and reuses valid test evidence;
+it intervenes when progress stalls. See [token economy](docs/TOKEN-ECONOMY.md)
+for the rules, current runtime limits and proposed event-driven improvements.
 
 ```text
 User                  -> objective in Codex
 Codex / Astra         -> plan + TASK.md + automatic dispatch
-ZCode / GLM-5.3-Flash  -> code + tests + RESULT.md
-Codex / Astra         -> verify + REVIEW.md + automatic corrections
+ZCode / GLM-5.3-Flash  -> code + self-check + repair/retry + RESULT.md
+Codex / Astra         -> focused review + reuse evidence + corrections if needed
 Codex / Astra         -> accept + integrate + continue toward the objective
 ```
 
