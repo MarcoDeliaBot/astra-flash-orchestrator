@@ -358,8 +358,9 @@ class WorkerNotifyEndToEndTests(unittest.TestCase):
         self.assertIn("workspace locked", out)
         self.assertFalse((ws / "spawned.marker").exists())
 
+    @patch.dict(os.environ, {key: host_env()[key] for key in HOST_ENV_VARS})
     def test_ledger_dedupe_skips_delivered_and_uncertain_events(self):
-        """Same event_id is never retransmitted, whatever its recorded state."""
+        """Delivered or uncertain event IDs are never retransmitted."""
         import importlib.util
         spec = importlib.util.spec_from_file_location("zw_dedupe", WORKER)
         zw = importlib.util.module_from_spec(spec)
@@ -392,6 +393,7 @@ class WorkerNotifyEndToEndTests(unittest.TestCase):
         runner.run_dir = ws / "attempt-01"
         (ws / "attempt-01").mkdir()
         runner.notify = notify
+        runner.notify_server = str(self.mcp)  # no dependency on an installed host
         identity = {"stable_hash": "h", "input_hash": "i"}
         with patch.object(notify, "NotifyClient", StubClient):
             runner.notify_event("permission", identity, "evidence.md")

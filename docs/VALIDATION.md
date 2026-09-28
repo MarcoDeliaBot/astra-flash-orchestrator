@@ -9,6 +9,8 @@ the installed official `codex-app-tools` MCP server 0.1.5.
   symlink privileges. The 22 new notification tests exercise synthetic MCP
   receipts, exact-thread matching, bounded errors, durable deduplication,
   permission ordering, startup confirmation/cancellation and helper installation.
+  The first CI run exposed a deduplication test relying on the local desktop
+  environment; its setup now supplies synthetic host metadata and a fake server.
   Consult the published commit's Actions run for Linux/Windows matrix results.
 - The new client's read-only preflight recognized the real installed host tool.
   An earlier actual self-notification arrived while the owning chat was active.
