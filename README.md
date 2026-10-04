@@ -1,5 +1,9 @@
 # Astra orchestrates. GLM-5.3-Flash implements.
 
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-yellow?style=for-the-badge&logo=buy-me-a-coffee)](https://github.com/sponsors/MarcoDeliaBot)
+
+Optional support for MarcoDeliaBot. This project is free to use.
+
 **ChatGPT/Astra in Codex is the orchestrator:** it plans, assigns work, reviews
 the changes and decides acceptance. **GLM-5.3-Flash in ZCode is the worker:**
 it implements, tests, debugs and returns evidence to Astra.
